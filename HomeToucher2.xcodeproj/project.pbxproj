@@ -1,0 +1,577 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 48;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		7E3FCE531DC9E7A000E14995 /* FrameBufferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */; };
+		7E3FCE5A1DCA4BDC00E14995 /* PromisedLand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */; };
+		7E5269941E054CEC0080143A /* PropertiesBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5269931E054CEC0080143A /* PropertiesBytes.swift */; };
+		7E7AFF111DEEDC76007BF5BE /* HomeTouchManagerBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7AFF101DEEDC76007BF5BE /* HomeTouchManagerBrowser.swift */; };
+		7E7AFF181DF0155C007BF5BE /* PromisedQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7AFF171DF0155C007BF5BE /* PromisedQueue.swift */; };
+		7E7AFF261DF099CD007BF5BE /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 7E7AFF1C1DF099CD007BF5BE /* Localizable.strings */; };
+		7E7AFF271DF099CD007BF5BE /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 7E7AFF1F1DF099CD007BF5BE /* Localizable.strings */; };
+		7E83B35D1DE89BD700DA9B23 /* RemoteFrameBufferSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E83B35C1DE89BD700DA9B23 /* RemoteFrameBufferSession.swift */; };
+		7E83B3641DEB6AD100DA9B23 /* HomeTouchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E83B3631DEB6AD100DA9B23 /* HomeTouchManager.swift */; };
+		7EB63D301E9B862900F5A067 /* PromiseKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E3D666F1DC7E88C004AA99B /* PromiseKit.framework */; };
+		7EB63D311E9B862900F5A067 /* PromiseKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7E3D666F1DC7E88C004AA99B /* PromiseKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7EC4747C1E0AE10B00FCED0C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 7EC4747A1E0AE10B00FCED0C /* InfoPlist.strings */; };
+		7EC4747F1E0AE12E00FCED0C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 7EC4747D1E0AE12E00FCED0C /* InfoPlist.strings */; };
+		7EC9E0251E40E35800548B0A /* Beacon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC9E0241E40E35800548B0A /* Beacon.swift */; };
+		7EE6B07D1DC77702001BB837 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B07C1DC77702001BB837 /* AppDelegate.swift */; };
+		7EE6B0821DC77702001BB837 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 7EE6B0801DC77702001BB837 /* Main.storyboard */; };
+		7EE6B0841DC77702001BB837 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7EE6B0831DC77702001BB837 /* Assets.xcassets */; };
+		7EE6B0871DC77702001BB837 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 7EE6B0851DC77702001BB837 /* LaunchScreen.storyboard */; };
+		7EE6B0921DC777A5001BB837 /* networkChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B08E1DC777A5001BB837 /* networkChannel.swift */; };
+		7EE6B0931DC777A5001BB837 /* HomeTouchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B08F1DC777A5001BB837 /* HomeTouchModel.swift */; };
+		7EE6B0941DC777A5001BB837 /* HomeTouchViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B0901DC777A5001BB837 /* HomeTouchViewController.swift */; };
+		7EE6B0951DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B0911DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7E3D666E1DC7E88C004AA99B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 63B0AC571D595E1B00FA21D9;
+			remoteInfo = PromiseKit;
+		};
+		7E3D66701DC7E88C004AA99B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 631751A81D59766500A9DDDC;
+			remoteInfo = "PMKA+Tests";
+		};
+		7E3D66721DC7E88C004AA99B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 6314113C1D59795700E24B9E;
+			remoteInfo = PMKBridgeTests;
+		};
+		7E3D66741DC7E88C004AA99B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 630019221D596292003B4E30;
+			remoteInfo = PMKCoreTests;
+		};
+		7E3D66761DC7E88C004AA99B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 6314112F1D5978D700E24B9E;
+			remoteInfo = PMKDispatchTests;
+		};
+		7EB63D321E9B862900F5A067 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = 63B0AC561D595E1B00FA21D9;
+			remoteInfo = PromiseKit;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7EB63D341E9B862900F5A067 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				7EB63D311E9B862900F5A067 /* PromiseKit.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = PromiseKit.xcodeproj; path = PromiseKit/PromiseKit.xcodeproj; sourceTree = "<group>"; };
+		7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; lineEnding = 0; path = FrameBufferView.swift; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
+		7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PromisedLand.swift; sourceTree = "<group>"; };
+		7E5269931E054CEC0080143A /* PropertiesBytes.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PropertiesBytes.swift; sourceTree = "<group>"; };
+		7E7AFF101DEEDC76007BF5BE /* HomeTouchManagerBrowser.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeTouchManagerBrowser.swift; sourceTree = "<group>"; };
+		7E7AFF171DF0155C007BF5BE /* PromisedQueue.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PromisedQueue.swift; sourceTree = "<group>"; };
+		7E7AFF1D1DF099CD007BF5BE /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Localizable.strings; sourceTree = "<group>"; };
+		7E7AFF201DF099CD007BF5BE /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = Localizable.strings; sourceTree = "<group>"; };
+		7E83B35C1DE89BD700DA9B23 /* RemoteFrameBufferSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = RemoteFrameBufferSession.swift; sourceTree = "<group>"; };
+		7E83B3631DEB6AD100DA9B23 /* HomeTouchManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeTouchManager.swift; sourceTree = "<group>"; };
+		7EC4747B1E0AE10B00FCED0C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = InfoPlist.strings; sourceTree = "<group>"; };
+		7EC4747E1E0AE12E00FCED0C /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = InfoPlist.strings; sourceTree = "<group>"; };
+		7EC474841E0AF32C00FCED0C /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = he.lproj/Main.strings; sourceTree = "<group>"; };
+		7EC4BCC21E25674B00D0A4A6 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
+		7EC9E0241E40E35800548B0A /* Beacon.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Beacon.swift; sourceTree = "<group>"; };
+		7EE6B0791DC77702001BB837 /* HomeToucher2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HomeToucher2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7EE6B07C1DC77702001BB837 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = HomeToucher2/AppDelegate.swift; sourceTree = SOURCE_ROOT; };
+		7EE6B0811DC77702001BB837 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		7EE6B0831DC77702001BB837 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7EE6B0861DC77702001BB837 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		7EE6B0881DC77702001BB837 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7EE6B08E1DC777A5001BB837 /* networkChannel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = networkChannel.swift; sourceTree = "<group>"; };
+		7EE6B08F1DC777A5001BB837 /* HomeTouchModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeTouchModel.swift; sourceTree = "<group>"; };
+		7EE6B0901DC777A5001BB837 /* HomeTouchViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; lineEnding = 0; path = HomeTouchViewController.swift; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
+		7EE6B0911DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeTouchZoneSelectionViewController.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7EE6B0761DC77702001BB837 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7EB63D301E9B862900F5A067 /* PromiseKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		7E3D66671DC7E88B004AA99B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7E3D666F1DC7E88C004AA99B /* PromiseKit.framework */,
+				7E3D66711DC7E88C004AA99B /* PMKA+Tests.xctest */,
+				7E3D66731DC7E88C004AA99B /* PMKBridgeTests.xctest */,
+				7E3D66751DC7E88C004AA99B /* PMKCoreTests.xctest */,
+				7E3D66771DC7E88C004AA99B /* PMKDispatchTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7E7AFF191DF099CD007BF5BE /* en.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				7E7AFF1C1DF099CD007BF5BE /* Localizable.strings */,
+				7EC4747A1E0AE10B00FCED0C /* InfoPlist.strings */,
+			);
+			path = en.lproj;
+			sourceTree = "<group>";
+		};
+		7E7AFF1E1DF099CD007BF5BE /* he.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				7E7AFF1F1DF099CD007BF5BE /* Localizable.strings */,
+				7EC4747D1E0AE12E00FCED0C /* InfoPlist.strings */,
+			);
+			path = he.lproj;
+			sourceTree = "<group>";
+		};
+		7EC474801E0AE3B700FCED0C /* Base.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				7EE6B0801DC77702001BB837 /* Main.storyboard */,
+			);
+			name = Base.lproj;
+			sourceTree = "<group>";
+		};
+		7EC4BCC11E25674B00D0A4A6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7EC4BCC21E25674B00D0A4A6 /* CoreBluetooth.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7EE6B0701DC77702001BB837 = {
+			isa = PBXGroup;
+			children = (
+				7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */,
+				7EE6B07B1DC77702001BB837 /* HomeToucher2 */,
+				7EE6B07A1DC77702001BB837 /* Products */,
+				7EC4BCC11E25674B00D0A4A6 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		7EE6B07A1DC77702001BB837 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7EE6B0791DC77702001BB837 /* HomeToucher2.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7EE6B07B1DC77702001BB837 /* HomeToucher2 */ = {
+			isa = PBXGroup;
+			children = (
+				7EC474801E0AE3B700FCED0C /* Base.lproj */,
+				7E7AFF191DF099CD007BF5BE /* en.lproj */,
+				7E7AFF1E1DF099CD007BF5BE /* he.lproj */,
+				7EE6B08E1DC777A5001BB837 /* networkChannel.swift */,
+				7EE6B08F1DC777A5001BB837 /* HomeTouchModel.swift */,
+				7EE6B0901DC777A5001BB837 /* HomeTouchViewController.swift */,
+				7EE6B0911DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift */,
+				7EE6B07C1DC77702001BB837 /* AppDelegate.swift */,
+				7EE6B0831DC77702001BB837 /* Assets.xcassets */,
+				7EE6B0851DC77702001BB837 /* LaunchScreen.storyboard */,
+				7EE6B0881DC77702001BB837 /* Info.plist */,
+				7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */,
+				7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */,
+				7E83B35C1DE89BD700DA9B23 /* RemoteFrameBufferSession.swift */,
+				7E83B3631DEB6AD100DA9B23 /* HomeTouchManager.swift */,
+				7E7AFF101DEEDC76007BF5BE /* HomeTouchManagerBrowser.swift */,
+				7E7AFF171DF0155C007BF5BE /* PromisedQueue.swift */,
+				7E5269931E054CEC0080143A /* PropertiesBytes.swift */,
+				7EC9E0241E40E35800548B0A /* Beacon.swift */,
+			);
+			path = HomeToucher2;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7EE6B0781DC77702001BB837 /* HomeToucher2 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7EE6B08B1DC77702001BB837 /* Build configuration list for PBXNativeTarget "HomeToucher2" */;
+			buildPhases = (
+				7EE6B0751DC77702001BB837 /* Sources */,
+				7EE6B0761DC77702001BB837 /* Frameworks */,
+				7EE6B0771DC77702001BB837 /* Resources */,
+				7EB63D341E9B862900F5A067 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7EB63D331E9B862900F5A067 /* PBXTargetDependency */,
+			);
+			name = HomeToucher2;
+			productName = HomeToucher2;
+			productReference = 7EE6B0791DC77702001BB837 /* HomeToucher2.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7EE6B0711DC77702001BB837 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 0810;
+				LastUpgradeCheck = 0820;
+				ORGANIZATIONNAME = "Yuval Rakavy";
+				TargetAttributes = {
+					7EE6B0781DC77702001BB837 = {
+						CreatedOnToolsVersion = 8.1;
+						DevelopmentTeam = 8362JN58XW;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 7EE6B0741DC77702001BB837 /* Build configuration list for PBXProject "HomeToucher2" */;
+			compatibilityVersion = "Xcode 8.0";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				he,
+			);
+			mainGroup = 7EE6B0701DC77702001BB837;
+			productRefGroup = 7EE6B07A1DC77702001BB837 /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 7E3D66671DC7E88B004AA99B /* Products */;
+					ProjectRef = 7E3D66661DC7E88B004AA99B /* PromiseKit.xcodeproj */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				7EE6B0781DC77702001BB837 /* HomeToucher2 */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXReferenceProxy section */
+		7E3D666F1DC7E88C004AA99B /* PromiseKit.framework */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.framework;
+			path = PromiseKit.framework;
+			remoteRef = 7E3D666E1DC7E88C004AA99B /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		7E3D66711DC7E88C004AA99B /* PMKA+Tests.xctest */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.cfbundle;
+			path = "PMKA+Tests.xctest";
+			remoteRef = 7E3D66701DC7E88C004AA99B /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		7E3D66731DC7E88C004AA99B /* PMKBridgeTests.xctest */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.cfbundle;
+			path = PMKBridgeTests.xctest;
+			remoteRef = 7E3D66721DC7E88C004AA99B /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		7E3D66751DC7E88C004AA99B /* PMKCoreTests.xctest */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.cfbundle;
+			path = PMKCoreTests.xctest;
+			remoteRef = 7E3D66741DC7E88C004AA99B /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		7E3D66771DC7E88C004AA99B /* PMKDispatchTests.xctest */ = {
+			isa = PBXReferenceProxy;
+			fileType = wrapper.cfbundle;
+			path = PMKDispatchTests.xctest;
+			remoteRef = 7E3D66761DC7E88C004AA99B /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+/* End PBXReferenceProxy section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7EE6B0771DC77702001BB837 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E7AFF261DF099CD007BF5BE /* Localizable.strings in Resources */,
+				7EC4747F1E0AE12E00FCED0C /* InfoPlist.strings in Resources */,
+				7EC4747C1E0AE10B00FCED0C /* InfoPlist.strings in Resources */,
+				7E7AFF271DF099CD007BF5BE /* Localizable.strings in Resources */,
+				7EE6B0871DC77702001BB837 /* LaunchScreen.storyboard in Resources */,
+				7EE6B0841DC77702001BB837 /* Assets.xcassets in Resources */,
+				7EE6B0821DC77702001BB837 /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7EE6B0751DC77702001BB837 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E5269941E054CEC0080143A /* PropertiesBytes.swift in Sources */,
+				7E83B35D1DE89BD700DA9B23 /* RemoteFrameBufferSession.swift in Sources */,
+				7EE6B0951DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift in Sources */,
+				7E3FCE5A1DCA4BDC00E14995 /* PromisedLand.swift in Sources */,
+				7E3FCE531DC9E7A000E14995 /* FrameBufferView.swift in Sources */,
+				7EE6B0931DC777A5001BB837 /* HomeTouchModel.swift in Sources */,
+				7EC9E0251E40E35800548B0A /* Beacon.swift in Sources */,
+				7E7AFF181DF0155C007BF5BE /* PromisedQueue.swift in Sources */,
+				7EE6B07D1DC77702001BB837 /* AppDelegate.swift in Sources */,
+				7E83B3641DEB6AD100DA9B23 /* HomeTouchManager.swift in Sources */,
+				7EE6B0921DC777A5001BB837 /* networkChannel.swift in Sources */,
+				7EE6B0941DC777A5001BB837 /* HomeTouchViewController.swift in Sources */,
+				7E7AFF111DEEDC76007BF5BE /* HomeTouchManagerBrowser.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7EB63D331E9B862900F5A067 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PromiseKit;
+			targetProxy = 7EB63D321E9B862900F5A067 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		7E7AFF1C1DF099CD007BF5BE /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7E7AFF1D1DF099CD007BF5BE /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		7E7AFF1F1DF099CD007BF5BE /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7E7AFF201DF099CD007BF5BE /* he */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		7EC4747A1E0AE10B00FCED0C /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7EC4747B1E0AE10B00FCED0C /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		7EC4747D1E0AE12E00FCED0C /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7EC4747E1E0AE12E00FCED0C /* he */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		7EE6B0801DC77702001BB837 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7EE6B0811DC77702001BB837 /* Base */,
+				7EC474841E0AF32C00FCED0C /* he */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		7EE6B0851DC77702001BB837 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7EE6B0861DC77702001BB837 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		7EE6B0891DC77702001BB837 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_SUSPICIOUS_MOVES = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7EE6B08A1DC77702001BB837 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_SUSPICIOUS_MOVES = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		7EE6B08C1DC77702001BB837 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = 8362JN58XW;
+				INFOPLIST_FILE = HomeToucher2/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 9.1;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.villarakavy.HomeToucher2;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 3.0;
+			};
+			name = Debug;
+		};
+		7EE6B08D1DC77702001BB837 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = 8362JN58XW;
+				INFOPLIST_FILE = HomeToucher2/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 9.1;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.villarakavy.HomeToucher2;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 3.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7EE6B0741DC77702001BB837 /* Build configuration list for PBXProject "HomeToucher2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7EE6B0891DC77702001BB837 /* Debug */,
+				7EE6B08A1DC77702001BB837 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7EE6B08B1DC77702001BB837 /* Build configuration list for PBXNativeTarget "HomeToucher2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7EE6B08C1DC77702001BB837 /* Debug */,
+				7EE6B08D1DC77702001BB837 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 7EE6B0711DC77702001BB837 /* Project object */;
+}

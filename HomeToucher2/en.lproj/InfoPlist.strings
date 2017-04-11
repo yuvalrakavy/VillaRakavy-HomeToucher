@@ -1,0 +1,8 @@
+/* 
+  InfoPlist.strings
+  HomeToucher2
+
+  Created by Yuval Rakavy on 21/12/2016.
+  Copyright © 2016 Yuval Rakavy. All rights reserved.
+*/
+"NSLocationWhenInUseUsageDescription" = "Automatically select domain based on your location";

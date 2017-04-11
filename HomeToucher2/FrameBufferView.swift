@@ -1,0 +1,145 @@
+//
+//  FrameBufferView.swift
+//  HomeToucher2
+//
+//  Created by Yuval Rakavy on 02/11/2016.
+//  Copyright © 2016 Yuval Rakavy. All rights reserved.
+//
+
+import Foundation
+import UIKit
+
+class FrameBufferView : UIView, FrameBitmapView {
+    public var frameBuffer: UnsafeMutableBufferPointer<PixelType>?
+    private var frameBufferImage: CGImage?
+    private var frameBufferRect: CGRect?
+    public var deviceShaken: PromisedQueue<Bool>?
+    
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.isUserInteractionEnabled = true
+        self.becomeFirstResponder()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        self.isUserInteractionEnabled = true
+        self.becomeFirstResponder()
+    }
+    
+    var isUsingRetinaDisplay: Bool {
+        get { return self.bounds.size.width < 800 && self.contentScaleFactor > 1 }
+    }
+    
+    var boundsInPixels: CGRect {
+        get {
+            
+            return self.isUsingRetinaDisplay ?
+                CGRect(x: self.bounds.origin.x * self.contentScaleFactor,
+                       y: self.bounds.origin.y * self.contentScaleFactor,
+                       width: self.bounds.size.width * self.contentScaleFactor,
+                       height: self.bounds.size.height * self.contentScaleFactor) : self.bounds
+        }
+    }
+    
+    override func draw(_ rect: CGRect) {
+        if let frameBufferImage = self.frameBufferImage, let context = UIGraphicsGetCurrentContext(), let frameBufferRect = self.frameBufferRect {
+            context.translateBy(x: 0, y: self.bounds.size.height)
+            
+            if self.isUsingRetinaDisplay {
+                context.scaleBy(x: 1/self.contentScaleFactor, y: -1/self.contentScaleFactor)
+            }
+            else {
+                context.scaleBy(x: 1, y: -1)
+            }
+            
+            context.draw(frameBufferImage, in: frameBufferRect)
+        }
+    }
+    
+    // MARK: Implement FrameBitmapView protocol
+    
+    public func allocateFrameBitmap(size: CGSize) {
+        self.freeFrameFrameBitmap()
+        self.frameBufferRect = CGRect(x: (self.boundsInPixels.size.width - size.width) / 2,
+                                      y: (self.boundsInPixels.size.height - size.height) / 2,
+                                      width: size.width,
+                                      height: size.height)
+        
+        let pixelCount = Int(size.height * size.width)
+        
+        self.frameBuffer = UnsafeMutableBufferPointer(start: UnsafeMutablePointer<PixelType>.allocate(capacity: pixelCount), count: pixelCount)
+        
+        let releaseDataCallback: CGDataProviderReleaseDataCallback = { _, data, size in }
+        let dataProvider = CGDataProvider(dataInfo: nil, data: frameBuffer!.baseAddress!, size: pixelCount * MemoryLayout<PixelType>.size, releaseData: releaseDataCallback)
+        
+        self.frameBufferImage = CGImage(width: Int(size.width), height: Int(size.height),
+                       bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: Int(size.width) * 4,
+                       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo.byteOrder32Big, provider: dataProvider!, decode: nil, shouldInterpolate: false,
+                       intent: CGColorRenderingIntent.defaultIntent)
+    }
+    
+    public func freeFrameFrameBitmap() {
+        if let frameBuffer = self.frameBuffer, let frameBufferImage = self.frameBufferImage {
+            self.frameBufferImage = nil
+            
+            if let baseAddress = frameBuffer.baseAddress {
+                baseAddress.deallocate(capacity: frameBufferImage.width * frameBufferImage.height)
+            }
+            
+            self.frameBuffer = nil
+        }
+    }
+    
+    public var frameBitmap: UnsafeMutableBufferPointer<PixelType> {
+        get {
+            return self.frameBuffer!
+        }
+    }
+    
+    public func redisplay(rect: CGRect) {
+        if let frameBufferRect = self.frameBufferRect {
+            let rectangleToRedraw = self.isUsingRetinaDisplay ?
+                CGRect(
+                    x: (frameBufferRect.origin.x + rect.origin.x) / self.contentScaleFactor,
+                    y: (frameBufferRect.origin.y + rect.origin.y) / self.contentScaleFactor,
+                    width: rect.size.width / self.contentScaleFactor,
+                    height: rect.size.height / self.contentScaleFactor
+                ) : CGRect(
+                    x: frameBufferRect.origin.x + rect.origin.x,
+                    y: frameBufferRect.origin.y + rect.origin.y,
+                    width: rect.size.width,
+                    height: rect.size.height
+            )
+            
+            self.setNeedsDisplay(rectangleToRedraw)
+        }
+    }
+    
+    public func getHitPoint(recognizer: UIGestureRecognizer) -> CGPoint? {
+        if let frameBufferRect = self.frameBufferRect {
+            let hitPoint = recognizer.location(in: self)
+            let scaleFactor = self.contentScaleFactor
+            
+            let result = self.isUsingRetinaDisplay ?
+                CGPoint(x: (hitPoint.x - frameBufferRect.origin.x / scaleFactor) * scaleFactor, y: (hitPoint.y - frameBufferRect.origin.y / scaleFactor) * scaleFactor) :
+                CGPoint(x: (hitPoint.x - frameBufferRect.origin.x), y: (hitPoint.y - frameBufferRect.origin.y))
+            
+            if result.x < frameBufferRect.size.width && result.y < frameBufferRect.size.height {
+                return result
+            }
+        }
+        
+        return nil
+    }
+    
+    override var canBecomeFirstResponder: Bool { get { return true } }
+    
+    override func motionEnded(_ motion: UIEventSubtype, with event: UIEvent?) {
+        super.motionEnded(motion, with: event)
+        
+        if motion == .motionShake {
+            self.deviceShaken?.send(true)
+        }
+    }
+}

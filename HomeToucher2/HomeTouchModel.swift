@@ -1,0 +1,251 @@
+//
+//  HomeTouchModel.swift
+//  HomeToucher2
+//
+//  Created by Yuval Rakavy on 12.10.2015.
+//  Copyright © 2015 Yuval Rakavy. All rights reserved.
+//
+
+import Foundation
+import UIKit
+import CoreLocation
+
+let ServiceNameKey = "HomeTouchManagerServiceName"
+let ManagerAddressesKey = "HomeTouchManagers"
+let ManagerLocationslongitudeKey = "HomeTouchManagerlongitudes"
+let ManagerLocationsLatitudeKey = "HomeTouchManagerLatitudes"
+let geoSelectEnabledKey = "GeoSelectEnabled"
+let beaconStateKey = "BeaconState"
+let beaconMajorKey = "BeaconMajor"
+let beaconMinorKey = "BeaconMinor"
+
+public typealias GeoLocation = (longitude: Double, latitude: Double)
+public typealias iBeaconInfo = (major: UInt16, minor: UInt16)
+
+public class HomeTouchModel {
+    public var homeTouchManagerServiceName: String? {
+        willSet(serviceName) {
+            if serviceName != homeTouchManagerServiceName {
+                let store = UserDefaults();
+                
+                store.setValue(serviceName, forKey: ServiceNameKey);
+                store.synchronize()
+            }
+        }
+    }
+    
+    private var _geoSelectEnabled: Bool?
+    
+    public var geoSelectEnabled: Bool {
+        get {
+            if let result = self._geoSelectEnabled {
+                return result
+            }
+            else {
+                self._geoSelectEnabled = UserDefaults().bool(forKey: geoSelectEnabledKey)
+                return self._geoSelectEnabled ?? false
+            }
+        }
+
+        set {
+            if newValue != self._geoSelectEnabled {
+                let store = UserDefaults()
+                
+                self._geoSelectEnabled = newValue
+                store.setValue(newValue, forKey: geoSelectEnabledKey)
+                store.synchronize()
+            }
+        }
+    }
+
+    public var lastGeoSelectedDomain: String?
+    
+    public var homeTouchManagerServiceAddress: Data? {
+        get {
+            return self.homeTouchManagerServiceName != nil ? self.managerAddresses[self.homeTouchManagerServiceName!] : nil
+        }
+    }
+    
+    public var managerAddresses: [String: Data]
+    
+    public var managerLocations: [String: CLLocation]
+    
+    
+    init() {
+        let store = UserDefaults();
+        
+        homeTouchManagerServiceName = store.string(forKey: ServiceNameKey);
+        
+        if let managers = store.dictionary(forKey: ManagerAddressesKey) as? [String: Data] {
+            self.managerAddresses = managers;
+        }
+        else {
+            self.managerAddresses = [String: Data]();
+        }
+        
+        self.managerLocations = [String: CLLocation]()
+        
+        if let longitudes = store.dictionary(forKey: ManagerLocationslongitudeKey) as? [String: Double],
+           let latitudes = store.dictionary(forKey: ManagerLocationsLatitudeKey) as? [String: Double] {
+            
+            for (name, _) in longitudes {
+                self.managerLocations[name] = CLLocation(latitude: latitudes[name]!, longitude: longitudes[name]!)
+            }
+        }
+        
+        self.defineShortcuts()
+    }
+    
+    static func decode<T>(data: Data) -> T {
+        return data.withUnsafeBytes {(ptr: UnsafePointer<T>) -> T in ptr.pointee }
+    }
+    
+    static func getDestinationIpV4address(homeTouchManagerService: NetService) -> Data? {
+        if let addresses = homeTouchManagerService.addresses {
+            for addressData in addresses {
+                let addr: sockaddr_storage = HomeTouchModel.decode(data: addressData)
+                
+                if addr.ss_family == UInt8(AF_INET) {
+                    return addressData;
+                }
+            }
+        }
+        
+        return nil;
+    }
+    
+    private var _beaconState: Bool?
+    private var _beaconInfo: iBeaconInfo?
+    
+    private func loadBeaconInfo<R>(_ result: () -> R) -> R {
+        let store = UserDefaults()
+        
+        self._beaconState = store.bool(forKey: beaconStateKey)
+        self._beaconInfo = (UInt16(store.integer(forKey: beaconMajorKey)), UInt16(store.integer(forKey: beaconMinorKey)))
+        return result()
+    }
+    
+    private func storeBeaconInfo(_ value: Any, forKey: String) {
+        let store = UserDefaults()
+        store.setValue(value, forKey: beaconStateKey)
+        store.synchronize()
+    }
+    
+    public let beaconUUID = UUID(uuidString:"D81B3C4A-5D8B-42FD-9EAA-86341A5590D4")!
+    
+    public var beaconState: Bool {
+        get { return self._beaconState ?? self.loadBeaconInfo { () in self._beaconState! } }
+        
+        set {	
+            self._beaconState = newValue
+            self.storeBeaconInfo(newValue, forKey: beaconStateKey)
+        }
+    }
+ 
+    public var beaconInfo: iBeaconInfo {
+        get { return self._beaconInfo ?? self.loadBeaconInfo { () in self._beaconInfo! } }
+        
+        set {
+            self._beaconInfo = newValue
+            
+            let store = UserDefaults()
+            store.setValue(newValue.major, forKey: beaconMajorKey)
+            store.setValue(newValue.minor, forKey: beaconMinorKey)
+            store.synchronize()
+        }
+    }
+    
+    public func add(service: NetService) {
+        let store = UserDefaults()
+        var modified = false
+        
+        if let address = HomeTouchModel.getDestinationIpV4address(homeTouchManagerService: service) {
+            if let existingServiceAddress = self.managerAddresses[service.name], address == existingServiceAddress {
+                // Do nothing since the service is already there
+            }
+            else {
+                self.managerAddresses[service.name] = address
+                store.setValue(self.managerAddresses, forKey: ManagerAddressesKey)
+                modified = true
+            }
+        }
+        
+        if let geoLocation = self.getServiceGeoLocation(service) {
+            self.managerLocations[service.name] = geoLocation
+            self.storeLocations(store)
+            modified = true
+        }
+        
+        if modified {
+            store.synchronize()
+            self.defineShortcuts()
+        }
+    }
+    
+    public func getServiceGeoLocation(_ service: NetService) -> CLLocation? {
+        if let txtRecordData = service.txtRecordData() {
+            let txtRecord = NetService.dictionary(fromTXTRecord: txtRecordData)
+            
+            if let longitudeData = txtRecord["longitude"], let latitudeData = txtRecord["latitude"],
+                let longitudeString = String(bytes: longitudeData, encoding: String.Encoding.utf8),
+                let latitudeString = String(bytes: latitudeData, encoding: String.Encoding.utf8),
+                let longitude = Double(longitudeString),
+                let latitude = Double(latitudeString)
+            {
+                return CLLocation(latitude: latitude, longitude: longitude)
+            }
+        }
+        
+        return nil
+    }
+    
+    private func storeLocations(_ store: UserDefaults) {
+        var longitudes = [String: Double]()
+        var latitudes = [String: Double]()
+        
+        self.managerLocations.forEach { (name, location) in
+            longitudes[name] = location.coordinate.longitude
+            latitudes[name] = location.coordinate.latitude
+        }
+        
+        store.setValue(longitudes, forKey: ManagerLocationslongitudeKey)
+        store.setValue(latitudes, forKey:ManagerLocationsLatitudeKey)
+    }
+    
+    public func remove(serviceName: String) {
+        let store = UserDefaults()
+        var modified = false
+        
+        if let _ = self.managerAddresses.removeValue(forKey: serviceName) {
+            if serviceName == self.homeTouchManagerServiceName {
+                self.homeTouchManagerServiceName = nil
+                modified = true
+            }
+            
+            store.setValue(self.managerAddresses, forKey: ManagerAddressesKey)
+            modified = true
+        }
+        
+        if let _ = self.managerLocations.removeValue(forKey: serviceName) {
+            self.storeLocations(store)
+            modified = true
+        }
+        
+        if modified {
+            store.synchronize()
+            self.defineShortcuts()
+        }
+    }
+    
+    public func defineShortcuts() {
+        if UIApplication.shared.shortcutItems != nil {
+            var shortcuts : [UIApplicationShortcutItem] = []
+            
+            for (name, _) in self.managerAddresses {
+                shortcuts.append(UIApplicationShortcutItem(type: "HomeTouchManager", localizedTitle: name))
+            }
+            
+            UIApplication.shared.shortcutItems = shortcuts
+        }
+    }
+}

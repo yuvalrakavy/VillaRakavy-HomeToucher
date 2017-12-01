@@ -28,13 +28,15 @@ class FrameBufferView : UIView, FrameBitmapView {
     }
     
     var isUsingRetinaDisplay: Bool {
-        get { return self.bounds.size.width < 800 && self.contentScaleFactor > 1 }
+        get { return self.contentScaleFactor > 1 }
     }
     
-    var boundsInPixels: CGRect {
+    public var lowRes: Bool = false
+    
+    var frameBounds: CGRect {
         get {
             
-            return self.isUsingRetinaDisplay ?
+            return (self.isUsingRetinaDisplay && !self.lowRes) ?
                 CGRect(x: self.bounds.origin.x * self.contentScaleFactor,
                        y: self.bounds.origin.y * self.contentScaleFactor,
                        width: self.bounds.size.width * self.contentScaleFactor,
@@ -42,11 +44,20 @@ class FrameBufferView : UIView, FrameBitmapView {
         }
     }
     
+    var frameSafeAreaInsets: UIEdgeInsets {
+        get {
+            let scale = self.lowRes ? 1 : self.contentScaleFactor
+            
+            return UIEdgeInsets(top: self.safeAreaInsets.top * scale, left: self.safeAreaInsets.left * scale,
+                                bottom: self.safeAreaInsets.bottom * scale, right: self.safeAreaInsets.right * scale)
+        }
+    }
+    
     override func draw(_ rect: CGRect) {
         if let frameBufferImage = self.frameBufferImage, let context = UIGraphicsGetCurrentContext(), let frameBufferRect = self.frameBufferRect {
             context.translateBy(x: 0, y: self.bounds.size.height)
             
-            if self.isUsingRetinaDisplay {
+            if self.isUsingRetinaDisplay  && !self.lowRes {
                 context.scaleBy(x: 1/self.contentScaleFactor, y: -1/self.contentScaleFactor)
             }
             else {
@@ -61,8 +72,8 @@ class FrameBufferView : UIView, FrameBitmapView {
     
     public func allocateFrameBitmap(size: CGSize) {
         self.freeFrameFrameBitmap()
-        self.frameBufferRect = CGRect(x: (self.boundsInPixels.size.width - size.width) / 2,
-                                      y: (self.boundsInPixels.size.height - size.height) / 2,
+        self.frameBufferRect = CGRect(x: (self.frameBounds.size.width - size.width) / 2,
+                                      y: (self.frameBounds.size.height - size.height) / 2,
                                       width: size.width,
                                       height: size.height)
         

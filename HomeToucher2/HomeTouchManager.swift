@@ -17,10 +17,12 @@ public class HomeTouchManager {
     private var resolveRecievedData: ((Data) -> Void)?
     private let receivedData = PromisedQueue<Data?>()
     private var screenSize: CGSize
+    private var safeAreaInsets: UIEdgeInsets
     
-    init(serverAddress: Data, screenSize: CGSize) {
+    init(serverAddress: Data, screenSize: CGSize, safeAreaInsets: UIEdgeInsets) {
         self.serverAddress = serverAddress
         self.screenSize = screenSize
+        self.safeAreaInsets = safeAreaInsets
         self.resolveRecievedData = nil
     }
     
@@ -78,13 +80,24 @@ public class HomeTouchManager {
             }
         }
         
+        let safeTop = String(Int(self.safeAreaInsets.top))
+        let safeBottom = String(Int(self.safeAreaInsets.bottom))
+        let safeLeft = String(Int(self.safeAreaInsets.left))
+        let safeRight = String(Int(self.safeAreaInsets.right))
+
         return Data([
             "Name": UIDevice.current.name,
             "ScreenWidth": String(Int(self.screenSize.width)),
             "ScreenHeight": String(Int(self.screenSize.height)),
             "FormFactor": getFormFactor(),
             "Device": UIDevice.current.model,
-            "Application": "HomeTouch"
+            "Application": "HomeTouch",
+            
+            "SafeTop": safeTop,
+            "SafeBottom": safeBottom,
+            "SafeLeft": safeLeft,
+            "SafeRight": safeRight
+
             ].packToBytes()
         )
     }

@@ -57,8 +57,8 @@ class PromisedLand {
     
     public static func getCancellationPromise() -> (promise: Promise<Bool>, cancelFunction: () -> Void) {
         var abortFunction:  (() -> Void)? = nil
-        let cancellationPromise: Promise<Bool> = Promise { resolve, reject in
-            abortFunction = { resolve(false) }
+        let cancellationPromise = Promise<Bool> { resolve, reject in
+            abortFunction = { _ = resolve(false) }
         }
         
         return (promise: cancellationPromise, cancelFunction: abortFunction! )

@@ -13,10 +13,11 @@ extension Sequence where Iterator.Element == (key: String, value: String) {
     func packToBytes() -> [UInt8] {
         let result: [UInt8] = self.reduce([]) {(result, pair) in
             let propertyName = [UInt8](pair.key.utf8)
+            let nameCountBytes = [UInt8(propertyName.count >> 8), UInt8(propertyName.count)]
             let propertyValue = [UInt8](pair.value.utf8)
+            let valueCountBytes = [UInt8(propertyValue.count >> 8), UInt8(propertyValue.count)]
             
-            return result + [UInt8(propertyName.count >> 8), UInt8(propertyName.count)] + propertyName +
-                [UInt8(propertyValue.count >> 8), UInt8(propertyValue.count)] + propertyValue
+            return result + nameCountBytes + propertyName + valueCountBytes + propertyValue
             } + [0, 0]
         
         return result

@@ -332,7 +332,7 @@ public class RemoteFrameBufferSession {
     
     private func formatInvokeApiCommand(parameters: [String: String]) -> [UInt8] {
         func getStringBytes(_ s: String) -> [UInt8] {
-            let l = s.characters.count
+            let l = s.count
             
             return  s.utf16.reduce([UInt8(l >> 8), UInt8(l)]) { result, c in result + [UInt8(c >> 8), UInt8(c)] }
         }
@@ -613,7 +613,17 @@ private struct RFB_TileColoredSubrect: TileSubrect {
     var xyPosition: UInt8
     var widthHeight: UInt8
     
-    var color: UInt32 { get { return (UInt32(color4) << 24) | (UInt32(color3) << 16) | (UInt32(color2) << 8) | UInt32(color1) } }
+    var color: UInt32 {
+        get {
+            let c4 = UInt32(color4) << 24
+            let c3 = UInt32(color3) << 16
+            let c2 = UInt32(color2) << 8
+            let c1 = UInt32(color1)
+            
+            return c4 | c3 | c2 | c1
+//            return UInt32((UInt32(color4) << 24) | (UInt32(color3) << 16) | (UInt32(color2) << 8) | UInt32(color1))
+        }
+    }
 }
 
 private protocol TileSubrect {

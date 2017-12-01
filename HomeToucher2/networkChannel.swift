@@ -263,7 +263,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
         }
 
         let count = dataItems.count as! Int
-        let dataPointer = UnsafeMutablePointer<T.Generator.Element>.allocate(capacity: count)
+        let dataPointer = UnsafeMutablePointer<T.Iterator.Element>.allocate(capacity: count)
         let dataBuffer = UnsafeMutableBufferPointer(start: dataPointer, count: count)
 
         let _ = dataBuffer.initialize(from: dataItems)

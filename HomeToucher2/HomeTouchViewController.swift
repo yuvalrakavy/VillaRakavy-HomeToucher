@@ -44,12 +44,16 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     func getRfbServer(cancellationPromise: Promise<Bool>) -> Promise<HostAddress> {
         let ensureHasDefaultHometouchService = model.homeTouchManagerServiceName == nil ?
           self.ensureHasHometouchService() : Promise(value: true)
+        
+        self.frameBufferView.lowRes = model.lowRes
     
         return ensureHasDefaultHometouchService.then { _ in
             // First the "fast lane" is tried - this assumes that the cached home manager address is valid
             if let homeTouchManagerAddress = self.model.homeTouchManagerServiceAddress {
                 self.stateLabel.text = NSLocalizedString("LookingForHomeTouchServer", comment: "")
-                return HomeTouchManager(serverAddress: homeTouchManagerAddress, screenSize: self.frameBufferView.boundsInPixels.size).getServer().then { maybeServerAddress in
+                return HomeTouchManager(serverAddress: homeTouchManagerAddress,
+                                        screenSize: self.frameBufferView.frameBounds.size,
+                                        safeAreaInsets: self.frameBufferView.frameSafeAreaInsets).getServer().then { maybeServerAddress in
                     if let serverAddress = maybeServerAddress {
                         return Promise(value: serverAddress)
                     }
@@ -97,7 +101,9 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
         }
         
         return PromisedLand.doWhile(cancellationPromise: cancellationPromise) { () in
-            return HomeTouchManager(serverAddress: self.model.homeTouchManagerServiceAddress!, screenSize: self.frameBufferView.boundsInPixels.size).getServer().then { mayBeHostAddress in
+            return HomeTouchManager(serverAddress: self.model.homeTouchManagerServiceAddress!,
+                                    screenSize: self.frameBufferView.frameBounds.size,
+                                    safeAreaInsets: self.frameBufferView.frameSafeAreaInsets).getServer().then { mayBeHostAddress in
                 if let result = mayBeHostAddress {
                     hostAddress = result
                     return Promise(value: false)            // Found host address

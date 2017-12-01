@@ -59,6 +59,14 @@ public class HomeTouchModel {
     }
 
     public var lastGeoSelectedDomain: String?
+
+    // If lowRes is true, then the resolution is in points and not pixel, e.g. on retina display the bitmaps will be
+    // qouter (if x2) or one ninth of the size (in case of x3), this should yield a much quicker operation with reduced
+    // display resoltion
+    //
+    public var lowRes: Bool {
+        get { return false }
+    }
     
     public var homeTouchManagerServiceAddress: Data? {
         get {

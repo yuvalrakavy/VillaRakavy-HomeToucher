@@ -46,25 +46,30 @@ public class RemoteFrameBufferSession {
     public func begin(server: String, port: Int, onSessionStarted: (() -> Void)? = nil) -> Promise<Bool> {
         NSLog("Starting RFB session")
         
-        return firstly {
-            self.initSession(server: server, port: port)
-        }.then(on: zalgo) { networkChannel in
+        func runSession(_ networkChannel: NetworkChannel) -> Promise<Bool> {
             let (cancellationPromise, cancel) = PromisedLand.getCancellationPromise()
             
             onSessionStarted?()
             
-            let sessionPromise = when(resolved:
+            let sessionPromise : Promise<Bool> = when(resolved:
                 [
                     self.handleGestures(networkChannel: networkChannel, cancellationPromise: cancellationPromise),
                     self.handleServerInput(networkChannel: networkChannel, cancellationPromise: cancellationPromise)
                 ]
-            ).always {
-                networkChannel.disconnect()
-                self.view.freeFrameFrameBitmap()
-            }.then(on: zalgo) { _ in true }
+                ).map { _ in
+                    networkChannel.disconnect()
+                    self.view.freeFrameFrameBitmap()
+                    return true
+            }
             
             self.activeSession = SessionInfo(networkChannel: networkChannel, sessionPromise: sessionPromise, cancel: cancel)
             return sessionPromise
+        }
+        
+        return firstly {
+            self.initSession(server: server, port: port)
+        }.then(on: nil) { networkChannel in
+            return runSession(networkChannel)
         }
     }
     
@@ -97,15 +102,23 @@ public class RemoteFrameBufferSession {
     private func initSession(server: String, port: Int) -> Promise<NetworkChannel> {
         let networkChannel = NetworkChannel(server: server, port: port)
         
-        return firstly {
-            networkChannel.connect()
-        }.then {_ in 
+        func sendUpdateRequestCommand() -> Promise<NetworkChannel> {
+            return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: false))
+        }
+        
+        func getSessionName(_ frameBufferInfo: FrameBufferInfo) -> Promise<String> {
+            return networkChannel.getFromServer(type: UInt8.self, count: Int(frameBufferInfo.nameLength)).map(on: nil) { (sessionNameBytes: [UInt8]) in
+                return String(bytes: sessionNameBytes, encoding: String.Encoding.windowsCP1253) ?? "Cannot decode name"
+            }
+        }
+        
+        return networkChannel.connect().then(on: nil) { (_: NetworkChannel) -> Promise<NetworkChannel>  in
             self.doVersionHandshake(networkChannel)
-        }.then(on: zalgo) {_ in
+        }.then(on: nil) { (_ : NetworkChannel) -> Promise<NetworkChannel>  in
             self.doSecurityHandshake(networkChannel)
-        }.then(on: zalgo) {_ in 
+        }.then(on: nil) { (_ : NetworkChannel) -> Promise<FrameBufferInfo> in
             networkChannel.getFromServer(type: FrameBufferInfo.self)
-        }.then(on: zalgo) { (unfixedframeBufferInfo: FrameBufferInfo) in
+        }.then(on: nil) { (unfixedframeBufferInfo: FrameBufferInfo) -> Promise<String> in
             var frameBufferInfo: FrameBufferInfo = unfixedframeBufferInfo
             
             // Convert fields from network order to host order
@@ -119,19 +132,17 @@ public class RemoteFrameBufferSession {
             self.frameBufferInfo = frameBufferInfo
             self.view.allocateFrameBitmap(size: frameBufferInfo.size)
             
-            return networkChannel.getFromServer(type: UInt8.self, count: Int(frameBufferInfo.nameLength)).then(on: zalgo) { (sessionNameBytes: [UInt8]) in
-                let sessionName = String(bytes: sessionNameBytes, encoding: String.Encoding.windowsCP1253) ?? "Cannot decode name"
-                
-                NSLog("RFB session name \(sessionName)")
-                return networkChannel.sendToServer(dataItems: self.formatSetEncodingCommand(supportedEncoding: [0, 5 , self.apiEncoding]))     // Raw and Hextile encoding are supported
-            }
-        }.then(on: zalgo) { (_:NetworkChannel) in
-            networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: false))
+            return getSessionName(frameBufferInfo)
+        }.then(on: nil) { (sessionName: String) -> Promise<NetworkChannel> in
+            NSLog("RFB session name \(sessionName)")
+            return networkChannel.sendToServer(dataItems: self.formatSetEncodingCommand(supportedEncoding: [0, 5 , self.apiEncoding]))     // Raw and Hextile encoding are supported
+        }.then(on: nil) { (_ : NetworkChannel) -> Promise<NetworkChannel> in
+            sendUpdateRequestCommand()
         }
     }
     
     private func doVersionHandshake(_ networkChannel: NetworkChannel) -> Promise<NetworkChannel> {
-        return networkChannel.getFromServer(type: UInt8.self, count: 12).then(on: zalgo) { serverVersionBytes in
+        return networkChannel.getFromServer(type: UInt8.self, count: 12).then(on: nil) { (serverVersionBytes: [UInt8]) -> Promise<NetworkChannel> in
             let version = [UInt8]("RFB 003.008\n".utf8)
             let serverVersion = String(bytes: serverVersionBytes, encoding: String.Encoding.utf8)!
             
@@ -142,91 +153,113 @@ public class RemoteFrameBufferSession {
     }
     
     private func doSecurityHandshake(_ networkChannel: NetworkChannel) -> Promise<NetworkChannel> {
-        return firstly {
-            self.doGetAuthenticationMethods(networkChannel)
-        }.then(on: zalgo) { (securityBytes: [UInt8]) in
-            return networkChannel.sendToServer(dataItem: UInt8(1))      // No authentication
-        }.then(on: zalgo) {_ in 
-            networkChannel.getFromServer(type: UInt32.self)
-        }.then(on: zalgo) { (securityResult) -> Promise<NetworkChannel> in
-            securityResult.bigEndian == 0 ?
+        func handleSecurityResult(_ securityResult: UInt32) -> Promise<NetworkChannel> {
+            return securityResult.bigEndian == 0 ?
                 networkChannel.sendToServer(dataItem: UInt8(1)) :  // Send ClientInit (share flag is true)
-                self.getErrorMessage(networkChannel: networkChannel).then(on: zalgo) { throw SessionError.SecurityFailed(errorMessage: $0) }
+                self.getErrorMessage(networkChannel: networkChannel).map(on: nil) {
+                    errorMessage in
+                        throw SessionError.SecurityFailed(errorMessage: errorMessage)
+                }
+        }
+        
+        return self.doGetAuthenticationMethods(networkChannel).then(on: nil) { (securityBytes: [UInt8]) -> Promise<NetworkChannel> in
+            return networkChannel.sendToServer(dataItem: UInt8(1))      // No authentication
+        }.then(on: nil) {_ in
+            networkChannel.getFromServer(type: UInt32.self)
+        }.then(on: nil) { (securityResult : UInt32) -> Promise<NetworkChannel> in
+            handleSecurityResult(securityResult)
         }
     }
     
     private func doGetAuthenticationMethods(_ networkChannel: NetworkChannel) -> Promise<[UInt8]> {
+        func handleAuthenticationMethod(_ methodCount: UInt8) -> Promise<[UInt8]> {
+            if methodCount > 0 {
+                return networkChannel.getFromServer(type: UInt8.self, count: Int(methodCount))
+            }
+            else {
+                return self.getErrorMessage(networkChannel: networkChannel).then(on: nil) { (errorMessage: String) -> Promise<[UInt8]> in
+                    throw SessionError.InvalidConnection(errorMessage: errorMessage)
+                }
+            }
+        }
+        
         return firstly {
             networkChannel.getFromServer(type: UInt8.self)
-        }.then(on: zalgo) {
-            $0 > 0 ? networkChannel.getFromServer(type: UInt8.self, count: Int($0)) :
-                self.getErrorMessage(networkChannel: networkChannel).then(on: zalgo) { throw SessionError.InvalidConnection(errorMessage: $0) }
+        }.then(on: nil) { (methodCount: UInt8) -> Promise<[UInt8]> in
+            return handleAuthenticationMethod(methodCount)
         }
     }
     
     private func getErrorMessage(networkChannel: NetworkChannel) -> Promise<String> {
-        return networkChannel.getFromServer(type: UInt32.self).then(on: zalgo) {
+        return networkChannel.getFromServer(type: UInt32.self).then(on: nil) {
             networkChannel.getFromServer(type: UInt8.self, count: Int($0.bigEndian))
-        }.then {
-            String(bytes: $0, encoding: String.Encoding.utf8)!
+        }.map {
+            return String(bytes: $0, encoding: String.Encoding.utf8)!
         }
     }
     
     private func handleServerInput(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
-        return PromisedLand.doWhile(cancellationPromise: cancellationPromise) { return self.handleServerReply(networkChannel: networkChannel) }
+        return PromisedLand.doWhile("handleServerInput", cancellationPromise: cancellationPromise) { return self.handleServerReply(networkChannel: networkChannel) }
     }
     
     private func handleServerReply(networkChannel: NetworkChannel) -> Promise<Bool> {
-        return networkChannel.getFromServer(type: UInt16.self).then(on: zalgo) {
-            let replyType = $0.bigEndian
+        func processReply(_ reply: UInt16) -> Promise<Bool> {
+            let replyType = reply.bigEndian
             
             if replyType == 0 {    // FrameBuffer update
-                return self.processFrameBufferUpdate(networkChannel: networkChannel).then(on: zalgo) {_ in
+                return self.processFrameBufferUpdate(networkChannel: networkChannel).then(on: nil) {_ in
                     // After done with updating, ask the server to send the next frame buffer update
                     return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
-                }.then(on: zalgo) { (_: NetworkChannel) in
-                    true
+                }.map(on: nil) { (_: NetworkChannel) in
+                     true
                 }
             }
             else if replyType == UInt16(self.apiEncoding) {
                 return self.processApiCall(networkChannel: networkChannel)
             }
             else{
-                return Promise<Bool>(value: false)
+                return Promise<Bool>.value(false)
             }
-        }.catch { _ in
+        }
+        
+        return networkChannel.getFromServer(type: UInt16.self).then(on: nil) { (reply: UInt16) -> Promise<Bool> in
+            return processReply(reply)
+        }.recover { _ in
             NSLog("handleServerReply - error -- calling self.terminate")
             self.terminate()
-        }
+            return Guarantee.value(false)
+        }.then { r in return Promise.value(r) }
     }
 
     private func receiveString(networkChannel: NetworkChannel) -> Promise<String?> {
-        return networkChannel.getFromServer(type: UInt16.self).then { count in
+        return networkChannel.getFromServer(type: UInt16.self).then { (count : UInt16) -> Promise<String?> in
             if count == 0 {
-                return Promise(value: nil)
+                return Promise.value(nil)
             }
             else {
                 return networkChannel.getFromServer(type: UInt8.self, count: Int(count.bigEndian) * 2).then {
-                    Promise(value: String(bytes: $0, encoding: String.Encoding.utf16BigEndian))
+                    Promise.value(String(bytes: $0, encoding: String.Encoding.utf16BigEndian))
                 }
             }
         }
     }
     
-    private func receiveNameValue(networkChannel: NetworkChannel) -> Promise<(name: String, value: String)?> {
-        return self.receiveString(networkChannel: networkChannel).then { mayBeName in
+    typealias OptionalNameValuePair = (name: String, value: String)?
+    
+    private func receiveNameValue(networkChannel: NetworkChannel) -> Promise<OptionalNameValuePair> {
+        return self.receiveString(networkChannel: networkChannel).then { (mayBeName : String?) -> Promise<OptionalNameValuePair> in
             if let name = mayBeName {
-                return self.receiveString(networkChannel: networkChannel).then { mayBeValue in
+                return self.receiveString(networkChannel: networkChannel).then { (mayBeValue: String?) -> Promise<OptionalNameValuePair> in
                     if let value = mayBeValue {
-                        return Promise(value: (name: name, value: value))
+                        return Promise.value((name: name, value: value))
                     }
                     else {
-                        return Promise(value: nil)
+                        return Promise.value(nil)
                     }
                 }
             }
             else {
-                return Promise(value: nil)
+                return Promise.value(nil)
             }
         }
     }
@@ -234,25 +267,26 @@ public class RemoteFrameBufferSession {
     private func processApiCall(networkChannel: NetworkChannel) -> Promise<Bool> {
         var dict = [String:String]()
         
-        return PromisedLand.doWhile {
-            return self.receiveNameValue(networkChannel: networkChannel).then { maybeNameValuePair in
+        return PromisedLand.doWhile("processApiCall") {
+            return self.receiveNameValue(networkChannel: networkChannel).map { maybeNameValuePair in
                 if let nameValuePair = maybeNameValuePair {
                     dict[nameValuePair.name] = nameValuePair.value
-                    return Promise(value: true)
+                    return true
                 }
                 else {
-                    return Promise(value: false)
+                    return false
                 }
             }
-        }.then { _ in
+        }.then { (_) -> Promise<Bool> in
             self.onApiCall?(dict)
-            return Promise(value: true)
+            NSLog("ProcessApiCall returning Promise.value(true)")
+            return Promise.value(true)
         }
     }
     
     private func handlePressGesture(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
-        return PromisedLand.doWhile(cancellationPromise: cancellationPromise) { () in
-            return self.press.wait().then(on: zalgo) { pressInfo in
+        return PromisedLand.doWhile("handlePressGebture", cancellationPromise: cancellationPromise) { () in
+            return self.press.wait().map(on: nil) { pressInfo in
                 switch(pressInfo.state) {
                     
                 case .began:
@@ -264,18 +298,18 @@ public class RemoteFrameBufferSession {
                 default: break
                     
                 }
-                return Promise(value: true)
+                return true
             }
         }
     }
     
     private func handleTapGesture(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
-        return PromisedLand.doWhile(cancellationPromise: cancellationPromise) { () in
-            return self.tap.wait().then(on: zalgo) { hitPoint in
+        return PromisedLand.doWhile("handleTapGesture", cancellationPromise: cancellationPromise) { () in
+            return self.tap.wait().map(on: nil) { hitPoint in
                 _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: true))
                 _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: false))
                 
-                return Promise(value: true)
+                return true
             }
         }
     }
@@ -286,7 +320,7 @@ public class RemoteFrameBufferSession {
                 handlePressGesture(networkChannel: networkChannel, cancellationPromise: cancellationPromise),
                 handleTapGesture(networkChannel: networkChannel, cancellationPromise: cancellationPromise)
             ]
-        ).then(on: zalgo) { _ in true }
+        ).map(on: nil) { _ in true }
     }
     
     // Get byte array represntng a given value
@@ -357,7 +391,7 @@ public class RemoteFrameBufferSession {
     // MARK: Process frame buffer rectangle update
     
     private func processFrameBufferUpdate(networkChannel: NetworkChannel) -> Promise<Bool> {
-        return networkChannel.getFromServer(type: UInt16.self).then(on: zalgo) {
+        return networkChannel.getFromServer(type: UInt16.self).then(on: nil) {
             PromisedLand.loop(Int($0.bigEndian)) { _ in
                 return self.updateRectangle(networkChannel)
             }
@@ -365,7 +399,7 @@ public class RemoteFrameBufferSession {
     }
     
     private func updateRectangle(_ networkChannel: NetworkChannel) -> Promise<Bool> {
-        return networkChannel.getFromServer(type: RFB_RectangleHeader.self).then(on: zalgo) { (header) -> Promise<Bool> in
+        return networkChannel.getFromServer(type: RFB_RectangleHeader.self).then(on: nil) { (header) -> Promise<Bool> in
             let processRectanglePromise: Promise<Bool>
             
             switch header.encoding {
@@ -381,9 +415,9 @@ public class RemoteFrameBufferSession {
                 
             }
             
-            return processRectanglePromise.then(on: zalgo) { _ in
+            return processRectanglePromise.map(on: nil) { _ in
                 self.view.redisplay(rect: header.rectangle)
-                return Promise<Bool>(value: true)
+                return true
             }
         }
     }
@@ -394,7 +428,7 @@ public class RemoteFrameBufferSession {
         if let frameBufferInfo = self.frameBufferInfo {
             let pixelsToGet = Int(header.height) * Int(header.width)
            
-            return networkChannel.getFromServer(type: UInt32.self, count: pixelsToGet).then(on: zalgo) { serverPixels in
+            return networkChannel.getFromServer(type: UInt32.self, count: pixelsToGet).map(on: nil) { serverPixels in
                 // Check for special case where the update is for the whole buffer
                 if header.x == 0 && header.y == 0 && UInt16(header.width) == frameBufferInfo.width && UInt16(header.height) == frameBufferInfo.height {
                     for index in 0 ..< pixelsToGet {
@@ -415,16 +449,16 @@ public class RemoteFrameBufferSession {
                     }
                     
                 }
-                return Promise<Bool>(value: true)
+                return true
             }
         }
         
-        return Promise<Bool>(value: true)
+        return Promise<Bool>.value(true)
     }
     
     private func processHextileEncoding(_ networkChannel: NetworkChannel, _ header: RFB_RectangleHeader) -> Promise<Bool> {
         guard let frameBufferInfo = frameBufferInfo else{
-            return Promise<Bool>(value: false)
+            return Promise<Bool>.value(false)
         }
         
         let frameBitmap = self.view.frameBitmap
@@ -450,10 +484,10 @@ public class RemoteFrameBufferSession {
                 }
             }
             
-            return networkChannel.getFromServer(type: UInt8.self).then(on: zalgo) { tileEncoding in
+            return networkChannel.getFromServer(type: UInt8.self).then(on: nil) { (tileEncoding : UInt8) -> Promise<Bool> in
                 if (tileEncoding & 1) != 0 {        // Tile is in raw encoding
              
-                    return networkChannel.getFromServer(type: UInt32.self, count: Int(tileRectangle.size.height) * Int(tileRectangle.size.width)).then(on: zalgo) { tileContent in
+                    return networkChannel.getFromServer(type: UInt32.self, count: Int(tileRectangle.size.height) * Int(tileRectangle.size.width)).then(on: nil) { (tileContent: [UInt32]) -> Promise<Bool> in
                         var yOffset = Int(tileRectangle.origin.y) * Int(frameBufferInfo.width)
                         var tileContentIndex = 0
                         
@@ -469,7 +503,7 @@ public class RemoteFrameBufferSession {
                             yOffset += Int(frameBufferInfo.width)
                         }
                         
-                        return Promise<Bool>(value: true)
+                        return Promise.value(true)
                     }
                 }
                 else {
@@ -481,7 +515,7 @@ public class RemoteFrameBufferSession {
                     
                     let subrectAreColored = (tileEncoding & 16) != 0
                     
-                    return networkChannel.getFromServer(type: UInt8.self, count: bytesToGet).then(on: zalgo) { tileData in
+                    return networkChannel.getFromServer(type: UInt8.self, count: bytesToGet).then(on: nil) { (tileData : [UInt8]) -> Promise<Bool> in
                         var subrectCount: UInt8 = 0
                         
                         tileData.withUnsafeBufferPointer { pTileData in
@@ -509,28 +543,28 @@ public class RemoteFrameBufferSession {
                         
                         if subrectCount > 0 {
                             if(subrectAreColored) {
-                                return networkChannel.getFromServer(type: RFB_TileColoredSubrect.self, count: Int(subrectCount)).then(on: zalgo) { subrects in
+                                return networkChannel.getFromServer(type: RFB_TileColoredSubrect.self, count: Int(subrectCount)).map(on: nil) { (subrects: [RFB_TileColoredSubrect]) -> Bool in
                                     for subrect in subrects {
                                         fillSubrect(subrect: subrect.rectangle, color: self.toDevicePixel(serverPixel: subrect.color))
                                     }
                                     
-                                    return Promise<Bool>(value: true)
+                                    return true
                                 }
                             }
                             else {
-                                return networkChannel.getFromServer(type: RFB_TileSubrect.self, count: Int(subrectCount)).then(on: zalgo) { subrects in
+                                return networkChannel.getFromServer(type: RFB_TileSubrect.self, count: Int(subrectCount)).map(on: nil) { (subrects : [RFB_TileSubrect]) -> Bool in
                                     for subrect in subrects {
                                         fillSubrect(subrect: subrect.rectangle, color: forgroundColor)
                                     }
                                     
-                                    return Promise<Bool>(value: true)
+                                    return true
                                 }
                             }
                         }
                         else {
                             // All the tile is in the same color (background color)
                             fillSubrect(subrect: CGRect(origin: CGPoint(x: 0, y: 0), size: tileRectangle.size), color: backgroundColor)
-                            return Promise<Bool>(value: true)
+                            return Promise.value(true)
                         }
                         
                     }

@@ -11,24 +11,23 @@ import PromiseKit
 
 public class PromisedQueue<T> {
     public var queue: [T] = []
-    var resolve: ((T) -> Void)? = nil
+    var fulfill: ((T) -> Void)? = nil
     var reject: ((Error) -> Void)? = nil
     var promise: Promise<T>?
     
     public func wait() -> Promise<T> {
         
         if self.promise == nil {
-            self.promise = Promise<T> { resolve, reject in
-                self.resolve = resolve
-                self.reject = reject
-            }
+            self.promise = Promise<T>(resolver: { seal in
+                self.fulfill = seal.fulfill
+            })
             
             self.sendNext()
         }
         
-        return self.promise!.then { v in
+        return self.promise!.map { v in
             self.promise = nil
-            return Promise(value: v)
+            return v
         }
     }
     
@@ -42,10 +41,10 @@ public class PromisedQueue<T> {
     }
     
     private func sendNext() {
-        if let resolve = self.resolve, self.queue.count > 0 {
+        if let resolve = self.fulfill, self.queue.count > 0 {
             let item = self.queue.removeFirst()
             
-            self.resolve = nil
+            self.fulfill = nil
             resolve(item)
         }
     }

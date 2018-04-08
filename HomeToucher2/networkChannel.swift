@@ -105,8 +105,8 @@ public class NetworkChannel : NSObject, StreamDelegate {
             input.open()
             output.open()
            
-            return Promise<NetworkChannel> { fulfill, reject in
-                state = .opening(fulfill, reject)
+            return Promise<NetworkChannel> { seal in
+                state = .opening(seal.fulfill, seal.reject)
             }
         }
         else {
@@ -132,10 +132,10 @@ public class NetworkChannel : NSObject, StreamDelegate {
     }
     
     deinit {
-        self.inputBufferPointer?.deallocate(bytes: inputBufferSize, alignedTo: 8)
+        self.inputBufferPointer?.deallocate()
         disconnect()
 
-        self.gotInputBuffer.queue.forEach { bufferInfo in bufferInfo.buffer.deallocate(bytes: self.inputBufferSize, alignedTo: 8) }
+        self.gotInputBuffer.queue.forEach { bufferInfo in bufferInfo.buffer.deallocate() }
     }
     
     private func deinitStream(stream: Stream) {
@@ -145,7 +145,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
     }
   
     public func getFromServer<T>(type: T.Type) -> Promise<T> {
-        return self.getFromServer(type: type, count: 1).then(on: zalgo) { $0[0] }
+        return self.getFromServer(type: type, count: 1).map(on: nil) { (result: [T]) -> T in result[0] }
     }
     
     public func getFromServer<T>(type: T.Type, count: Int) -> Promise<[T]> {
@@ -156,7 +156,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
         @inline(__always) func mayDeallocateBuffer() {
             // If all data has been consumed, deallocate the buffer
             if self.inputBufferIndex >= self.bytesInInputBuffer {
-                self.inputBufferPointer?.deallocate(bytes: self.inputBufferSize, alignedTo: 8)
+                self.inputBufferPointer?.deallocate()
                 self.inputBufferPointer = nil
             }
         }
@@ -169,13 +169,13 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 let buffer = UnsafeMutableBufferPointer(start: self.inputBufferPointer!.advanced(by: self.inputBufferIndex).assumingMemoryBound(to: T.self), count: count)
                 
                 self.inputBufferIndex += bytesToGet
-                let result = Promise<[T]>(value: Array(buffer))
+                let result = Promise<[T]>.value(Array(buffer))
                 mayDeallocateBuffer()
                 
                 return result
             }
             else {  // More bytes need to be read
-                let resultPointer = UnsafeMutableRawPointer.allocate(bytes: bytesToGet, alignedTo: 8)
+                let resultPointer = UnsafeMutableRawPointer.allocate(byteCount: bytesToGet, alignment: 8)
                 let resultBytes = UnsafeMutableRawBufferPointer(start: resultPointer, count: bytesToGet)
                 let inputBuffer = UnsafeMutableRawBufferPointer(start: self.inputBufferPointer!, count: self.inputBufferSize)
                 var gotSoFar = 0
@@ -188,8 +188,8 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 
                 mayDeallocateBuffer()
                 
-                return PromisedLand.doWhile {
-                    return self.gotInputBuffer.wait().then(on: zalgo) { bufferInfo in
+                return PromisedLand.doWhile("doGetFromServer") {
+                    return self.gotInputBuffer.wait().map(on: nil) { bufferInfo in
                         self.inputBufferPointer = bufferInfo.buffer
                         self.bytesInInputBuffer = bufferInfo.byteCount
                         self.inputBufferIndex = 0
@@ -206,13 +206,13 @@ public class NetworkChannel : NSObject, StreamDelegate {
                         }
 
                         mayDeallocateBuffer()
-                        return Promise(value: gotSoFar < bytesToGet)         // Continue as long as not all needed bytes are in the result bytes buffer
+                        return gotSoFar < bytesToGet         // Continue as long as not all needed bytes are in the result bytes buffer
                     }
-                }.then { _ in
+                }.map { _ in
                     let buffer = UnsafeMutableBufferPointer(start: resultPointer.assumingMemoryBound(to: T.self), count: count)
-                    let theResult = Promise<[T]>(value: Array(buffer))
+                    let theResult = Array(buffer)
                     
-                    resultPointer.deallocate(bytes: bytesToGet, alignedTo: 8)
+                    resultPointer.deallocate()
                     
                     return theResult
                 }
@@ -220,11 +220,11 @@ public class NetworkChannel : NSObject, StreamDelegate {
         }
         
         if count == 0 {
-            return Promise<[T]>(value: [])
+            return Promise<[T]>.value([])
         }
         
         if self.inputBufferPointer == nil {
-            return self.gotInputBuffer.wait().then { bufferInfo in
+            return self.gotInputBuffer.wait().then { (bufferInfo) -> Promise<[T]> in
                 self.inputBufferPointer = bufferInfo.buffer
                 self.bytesInInputBuffer = bufferInfo.byteCount
                 self.inputBufferIndex = 0
@@ -246,14 +246,14 @@ public class NetworkChannel : NSObject, StreamDelegate {
         let dataBuffer = UnsafeMutablePointer<T>.allocate(capacity: 1)
         dataBuffer.initialize(to: dataItem)
         
-        return Promise<OpaquePointer>(resolvers: { fulfill, reject in
-            writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: fulfill, reject: reject))
+        return Promise<OpaquePointer> { seal in
+            writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: seal.fulfill, reject: seal.reject))
             initiateNextWriteRequest()
-        }).then(on: zalgo) {
+        }.map(on: nil) {
             _ in self
-        }.always(on: zalgo) {
+        }.ensure(on: nil) {
             // Data was sent, dealloc temporary buffer
-            dataBuffer.deallocate(capacity: 1)
+            dataBuffer.deallocate()
         }
     }
     
@@ -262,20 +262,20 @@ public class NetworkChannel : NSObject, StreamDelegate {
             return Promise(error: state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
         }
 
-        let count = dataItems.count as! Int
+        let count = dataItems.count
         let dataPointer = UnsafeMutablePointer<T.Iterator.Element>.allocate(capacity: count)
         let dataBuffer = UnsafeMutableBufferPointer(start: dataPointer, count: count)
 
         let _ = dataBuffer.initialize(from: dataItems)
         
-        return Promise<OpaquePointer>(resolvers: { fulfill, reject in
-            writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: fulfill, reject: reject))
+        return Promise<OpaquePointer> { seal in
+            writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: seal.fulfill, reject: seal.reject))
             initiateNextWriteRequest()
-        }).then(on: zalgo) {
+        }.map(on: nil) {
             _ in self
-        }.always(on: zalgo) {
+        }.ensure(on: nil) {
             // Data was sent, dealloc temporary buffer
-            dataPointer.deallocate(capacity: count)
+            dataPointer.deallocate()
         }
     }
     
@@ -340,7 +340,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 assert(aStream === inputStream)
                 
                 while inputStream!.hasBytesAvailable {
-                    let buffer = UnsafeMutableRawPointer.allocate(bytes: self.inputBufferSize, alignedTo: 8)
+                    let buffer = UnsafeMutableRawPointer.allocate(byteCount: self.inputBufferSize, alignment: 8)
                     let count = self.inputStream!.read(buffer.assumingMemoryBound(to: UInt8.self), maxLength: self.inputBufferSize)
                     
                     self.gotInputBuffer.send((byteCount: count, buffer: buffer))

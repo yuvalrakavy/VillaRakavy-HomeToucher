@@ -37,13 +37,13 @@ public class HomeTouchManager {
         
         return firstly {
             PromisedLand.loop(retryCount) { _ in
-                if CFSocketSendData(socket, self.serverAddress as CFData!, self.createQuery() as CFData!, 10) != CFSocketError.success {
+                if CFSocketSendData(socket, self.serverAddress as CFData?, self.createQuery() as CFData?, 10) != CFSocketError.success {
                     NSLog("Error sending query packet")
                 }
                 
-                let _ = after(interval: timeout).then { self.receivedData.send(nil) }
+                let _ = after(seconds: timeout).done { self.receivedData.send(nil) }
                 
-                return self.receivedData.wait().then { maybeQueryReply in
+                return self.receivedData.wait().map { maybeQueryReply in
                     if let queryReply = maybeQueryReply, queryReply.count > 0 {
                         let reply = queryReply.unpackProperties()
                   
@@ -51,16 +51,16 @@ public class HomeTouchManager {
                             result = (serverName, port)
                         }
                         
-                        return Promise(value: false)        // break the loop - got reply
+                        return false        // break the loop - got reply
                     }
                     else {
-                        return Promise(value: true)         // Continue and try again
+                        return true         // Continue and try again
                     }
                 }
             }
-        }.then {_ in
+        }.map {_ in
             result
-        }.always {
+        }.ensure {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode)
         }
     }

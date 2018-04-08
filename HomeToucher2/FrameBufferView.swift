@@ -91,11 +91,11 @@ class FrameBufferView : UIView, FrameBitmapView {
     }
     
     public func freeFrameFrameBitmap() {
-        if let frameBuffer = self.frameBuffer, let frameBufferImage = self.frameBufferImage {
+        if let frameBuffer = self.frameBuffer {
             self.frameBufferImage = nil
             
             if let baseAddress = frameBuffer.baseAddress {
-                baseAddress.deallocate(capacity: frameBufferImage.width * frameBufferImage.height)
+                baseAddress.deallocate()
             }
             
             self.frameBuffer = nil

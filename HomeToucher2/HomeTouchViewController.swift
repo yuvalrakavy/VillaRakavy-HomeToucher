@@ -43,19 +43,22 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     
     func getRfbServer(cancellationPromise: Promise<Bool>) -> Promise<HostAddress> {
         let ensureHasDefaultHometouchService = model.homeTouchManagerServiceName == nil ?
-          self.ensureHasHometouchService() : Promise(value: true)
+          self.ensureHasHometouchService() : Promise.value(true)
         
         self.frameBufferView.lowRes = model.lowRes
-    
-        return ensureHasDefaultHometouchService.then { _ in
+        
+        func tryToGetServerAddress() -> Promise<HostAddress> {
+
             // First the "fast lane" is tried - this assumes that the cached home manager address is valid
             if let homeTouchManagerAddress = self.model.homeTouchManagerServiceAddress {
                 self.stateLabel.text = NSLocalizedString("LookingForHomeTouchServer", comment: "")
-                return HomeTouchManager(serverAddress: homeTouchManagerAddress,
-                                        screenSize: self.frameBufferView.frameBounds.size,
-                                        safeAreaInsets: self.frameBufferView.frameSafeAreaInsets).getServer().then { maybeServerAddress in
+                return HomeTouchManager(
+                    serverAddress: homeTouchManagerAddress,
+                    screenSize: self.frameBufferView.frameBounds.size,
+                    safeAreaInsets: self.frameBufferView.frameSafeAreaInsets
+                ).getServer().then { (maybeServerAddress: HostAddress?) -> Promise<HostAddress> in
                     if let serverAddress = maybeServerAddress {
-                        return Promise(value: serverAddress)
+                        return Promise.value(serverAddress)
                     }
                     else {
                         return self.tryGetServerAddress(cancellationPromise: cancellationPromise)
@@ -65,15 +68,18 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
             else {
                 assert(false, "No address for default hometouch server \(self.model.homeTouchManagerServiceName ?? "NO-NAME"))")
                 
-                return Promise(value: (hostname: "", port: 0))
+                return Promise.value((hostname: "", port: 0))
             }
+
         }
+    
+        return ensureHasDefaultHometouchService.then { _ in tryToGetServerAddress()}
     }
 
     func ensureHasHometouchService() -> Promise<Bool> {
         self.selectHomeTouchManager()
         
-        return self.homeTouchManagerServiceSelected.wait().then { _ in true }
+        return self.homeTouchManagerServiceSelected.wait().map { _ in true }
     }
     
     // Try to query the manager for the rfb server
@@ -82,39 +88,43 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     func tryGetServerAddress(cancellationPromise: Promise<Bool>) -> Promise<HostAddress> {
         var hostAddress: HostAddress? = nil
         
-        let _ = PromisedLand.doWhile(cancellationPromise: cancellationPromise) { () in
-            self.stateLabel.text = NSLocalizedString("LookingForHomeTouchManager", comment: "")
+        func setService(_ mayBeService: NetService?) -> Promise<Bool> {
+            if hostAddress != nil {
+                return Promise<Bool>.value(false)        // Found rfb server - no need to browse for manager service
+            }
             
-            return HomeTouchManagerBrowser(defaultManagerName: self.model.homeTouchManagerServiceName!).findManager().then { mayBeService in
-                if hostAddress != nil {
-                    return Promise(value: false)        // Found rfb server - no need to browse for manager service
-                }
-                
-                if let service = mayBeService {
-                    self.model.add(service: service);   // will update the service address if already exist, or add it as a new one
-                    return Promise(value: false)        // Got the service address - no need to keep looking
-                }
-                else {
-                    return after(interval: 5).then { true }
-                }
+            if let service = mayBeService {
+                self.model.add(service: service);   // will update the service address if already exist, or add it as a new one
+                return Promise<Bool>.value(false)        // Got the service address - no need to keep looking
+            }
+            else {
+                return after(seconds: 5).then { _ in return Guarantee<Bool>.value(true) }
             }
         }
         
-        return PromisedLand.doWhile(cancellationPromise: cancellationPromise) { () in
+        let _ = PromisedLand.doWhile("Looking for HomeTouchManager", cancellationPromise: cancellationPromise) { () in
+            self.stateLabel.text = NSLocalizedString("LookingForHomeTouchManager", comment: "")
+            
+            return HomeTouchManagerBrowser(defaultManagerName: self.model.homeTouchManagerServiceName!).findManager().then { mayBeService in
+                setService(mayBeService)
+            }
+        }
+        
+        return PromisedLand.doWhile("Getting Server", cancellationPromise: cancellationPromise) { () in
             return HomeTouchManager(serverAddress: self.model.homeTouchManagerServiceAddress!,
                                     screenSize: self.frameBufferView.frameBounds.size,
-                                    safeAreaInsets: self.frameBufferView.frameSafeAreaInsets).getServer().then { mayBeHostAddress in
+                                    safeAreaInsets: self.frameBufferView.frameSafeAreaInsets).getServer().map { mayBeHostAddress in
                 if let result = mayBeHostAddress {
                     hostAddress = result
-                    return Promise(value: false)            // Found host address
+                    return false            // Found host address
                 }
                 else {
-                    return Promise(value: true)             // Keep looking
+                    return true             // Keep looking
                 }
             }
-        }.then { _ in
+        }.map { _ in
             if let result = hostAddress {
-                return Promise(value: result)
+                return result
             }
             else {
                 throw HomeTouchControllerError.GetServerOperationAborted
@@ -125,19 +135,19 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     func handleRfbSessions(cancellationPromise: Promise<Bool>) -> Promise<Bool> {
         NSLog("Handle RFB sessions")
         
-        let _ : Promise<Bool> = cancellationPromise.then { _ in
+        let _ : Promise<Bool> = cancellationPromise.map { _ in
             if let session = self.activeRfbSession {
                 session.terminate()
                 self.activeRfbSession = nil
             }
             
-            return Promise(value: false)
+            return false
         }
      
         self.delayedStateLabel?.showAfter(time: self.showStateLabelAfter)
         
-        return PromisedLand.doWhile(cancellationPromise: cancellationPromise) { () in
-            return self.getRfbServer(cancellationPromise: cancellationPromise).then { serverAddress in
+        return PromisedLand.doWhile("handle RFB session", cancellationPromise: cancellationPromise) { () in
+            func doTheSession(_ serverAddress: HostAddress) -> Promise<Bool> {
                 self.activeRfbSession = RemoteFrameBufferSession(frameBitmapView: self.frameBufferView)
                 self.activeRfbSession?.onApiCall = self.dispatchApi
                 
@@ -145,15 +155,23 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
                     self.frameBufferView?.addGestureRecognizer(r)
                 }
                 
-                return self.activeRfbSession!.begin(server: serverAddress.hostname, port: serverAddress.port, onSessionStarted: { self.delayedStateLabel?.hide() }).then { _ in
-                    NSLog("RFB Session completed")
-                    self.activeRfbSession = nil
-                    
-                    return Promise(value: true)         // Restart another session
+                return self.activeRfbSession!.begin(
+                    server: serverAddress.hostname,
+                    port: serverAddress.port,
+                    onSessionStarted: { self.delayedStateLabel?.hide() }
+                ).map {_ in
+                        NSLog("RFB Session completed")
+                        self.activeRfbSession = nil
+            
+                        return true         // Restart another session
                 }.recover() { (error) -> Promise<Bool> in
                     NSLog("RFB session terminated with error: \(error)")
-                    return Promise(value: true)
+                    return Promise.value(true)
                 }
+            }
+            
+            return self.getRfbServer(cancellationPromise: cancellationPromise).then { (serverAddress: HostAddress) -> Promise<Bool> in
+                doTheSession(serverAddress)
             }
         }
     }
@@ -201,7 +219,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
 
         self.model.homeTouchManagerServiceName = name
 
-        let _: Promise<Bool> = HomeTouchManagerBrowser(defaultManagerName: name).findManager().then { theService in
+        let _: Promise<Bool> = HomeTouchManagerBrowser(defaultManagerName: name).findManager().map { theService in
             if let service = theService {
                 self.model.add(service: service)
                 self.homeTouchManagerServiceSelected.send(service)
@@ -210,7 +228,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
                 self.homeTouchManagerServiceSelected.send(nil)
             }
             
-            return Promise(value: true)
+            return true
         }
     }
     
@@ -335,25 +353,25 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     }
     
     func handleDeviceShaking() {
-        _ = PromisedLand.doWhile {
-            return self.deviceShaken.wait().then { _ in
+        _ = PromisedLand.doWhile("handleDeviceShaking") {
+            return self.deviceShaken.wait().then { (_ : Bool) -> Promise<Bool> in
                 if self.zoneSelectionController == nil {
                     self.selectHomeTouchManager()
                 }
                 
-                return Promise(value: true)
+                return Promise.value(true)
             }
         }
     }
     
     func handleHometouchManagerChange() {
-        _ = PromisedLand.doWhile {
-            return self.homeTouchManagerServiceSelected.wait().then { service in
+        _ = PromisedLand.doWhile("handleHometouchManagerChange") {
+            return self.homeTouchManagerServiceSelected.wait().map { service in
                 if service != nil {
                     self.activeRfbSession?.terminate()
                 }
                 
-                return Promise<Bool>(value: true)
+                return true
             }
         }
     }
@@ -393,9 +411,9 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
         
         self.handleHometouchManagerChange()
         
-        let _ : Promise<Bool> =  self.handleRfbSessions(cancellationPromise: abort.promise).then { _ in
+        let _ : Promise<Bool> =  self.handleRfbSessions(cancellationPromise: abort.promise).map { _ in
             NSLog("Rfb Sessions terminated")
-            return Promise(value: true)
+            return true
         }
     }
     
@@ -430,17 +448,17 @@ class DelayedLabel {
     }
     
     func showAfter(time: TimeInterval) {
-        let _: Promise<Bool> = Promise<Bool>() { resolve, reject in
-            self.reject = reject
+        let _: Promise<Bool> = Promise<Bool>() { seal in
+            self.reject = seal.reject
             
-            let _ = after(interval: time).then {
-                resolve(true)
+            let _ = after(seconds: time).done {
+                seal.fulfill(true)
             }
-        }.then { _ in
+        }.map { _ in
             self.reject = nil
             self.label.isHidden = false
             
-            return Promise(value: true)
+            return true
         }
     }
     

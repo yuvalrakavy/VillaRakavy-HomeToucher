@@ -19,7 +19,7 @@ class PromisedLand {
     //
     public static func loop(_ n: Int, _ body: @escaping (Int) -> Promise<Bool>) -> Promise<Bool> {
         func doLoop(_ count: Int) -> Promise<Bool> {
-            return count == 0 ? Promise(value: true) : body(n - count).then { $0 ? doLoop(count-1) : Promise(value: false) }
+            return count == 0 ? Promise.value(true) : body(n - count).then { $0 ? doLoop(count-1) : Promise.value(false) }
         }
        
         return doLoop(n)
@@ -30,36 +30,50 @@ class PromisedLand {
         
         func nextItem() -> Promise<Bool> {
             if let item = iterator.next() {
-                return body(item).then { $0 ? nextItem() : Promise(value: false) }
+                return body(item).then { $0 ? nextItem() : Promise.value(false) }
             }
             else {
-                return Promise<Bool>(value: true)               // loop was completed
+                return Promise.value(true)               // loop was completed
             }
         }
         
         return nextItem()
     }
     
-    public static func doWhile(_ body: @escaping () -> Promise<Bool>) -> Promise<Bool> {
+    public static func doWhile(_ optionalTitle: String?, _ body: @escaping () -> Promise<Bool>) -> Promise<Bool> {
         func doIt() -> Promise<Bool> {
-            return body().then { $0 ? doIt() : Promise(value: true) }
+            let title = optionalTitle ?? ""
+            
+            #if LOG_PROMISED_LAND
+            NSLog("doWhile \(title): invoke body")
+            #endif
+            
+            return body().then { (doMore: Bool) -> Promise<Bool> in
+                #if LOG_PROMISED_LAND
+                NSLog("doWhile \(title): body returned \(doMore)")
+                #endif
+                return doMore ? doIt() : Promise.value(true)
+            }
         }
 
         return doIt()
     }
     
-    public static func doWhile(cancellationPromise: Promise<Bool>, _ body: @escaping () -> Promise<Bool>) -> Promise<Bool> {
-        return doWhile {
-            return race(cancellationPromise.then { _ in Promise<Bool>(value: false) }, body())
+    public static func doWhile(_ optionalTitle: String?, cancellationPromise: Promise<Bool>, _ body: @escaping () -> Promise<Bool>) -> Promise<Bool> {
+        return doWhile(optionalTitle) {
+            return race(cancellationPromise.then { _ in Promise.value(false) }, body())
         }
     }
     
     
     public static func getCancellationPromise() -> (promise: Promise<Bool>, cancelFunction: () -> Void) {
         var abortFunction:  (() -> Void)? = nil
-        let cancellationPromise = Promise<Bool> { resolve, reject in
-            abortFunction = { _ = resolve(false) }
+       
+        func setAbortFunction(fulfill: @escaping (Bool) -> Void) {
+            abortFunction = { () -> Void in _ = fulfill(false) }
         }
+        
+        let cancellationPromise = Promise<Bool> { seal in setAbortFunction(fulfill: seal.fulfill) }
         
         return (promise: cancellationPromise, cancelFunction: abortFunction! )
     }

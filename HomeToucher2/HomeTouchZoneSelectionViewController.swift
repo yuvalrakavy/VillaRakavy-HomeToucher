@@ -69,16 +69,18 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
         }
         
         if(!moreComing) {
-            let _ : Promise<Bool> = when(resolved: self.newServices.map { (service) -> Promise<Bool> in
-                ServiceAddressResolver().resolveServiceAddress(service: service).then { mayBeResolvedService in
+            _ = when(fulfilled: self.newServices.map { service in
+                ServiceAddressResolver().resolveServiceAddress(service: service).done { mayBeResolvedService in
                     if let resolvedService = mayBeResolvedService {
-                        self.list.append(ListEntry(info: (name: service.name, geoDescription: self.delegate?.getGeoDescription(service: resolvedService)), service: resolvedService))
+                        self.list.append(ListEntry(info: (
+                            name: service.name,
+                            geoDescription: self.delegate?.getGeoDescription(service: resolvedService)),
+                            service: resolvedService)
+                        )
                     }
-                    return Promise(value: true)
                 }
-            }).then {_ in 
+            }).done {
                 self.homeTouchManagerServiceTable!.reloadData()
-                return Promise(value: true)
             }
         }
     }

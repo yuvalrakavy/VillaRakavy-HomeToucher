@@ -27,25 +27,24 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
     
         serviceBrowser.delegate = self
         
-        _ = after(interval: searchTimeout).then {
+        _ = after(seconds: searchTimeout).done {
             self.foundService?.send(false)
         }
         
         serviceBrowser.searchForServices(ofType: "_HtVncConf._udp", inDomain: "")
         
-        return foundService!.wait().then {_ in
+        return foundService!.wait().then {(_) -> Promise<NetService?> in
             serviceBrowser.stop()
             
             if let service = self.theService {
-                
                 return ServiceAddressResolver().resolveServiceAddress(service: service).then { aResolvedService in
-                    return Promise(value: aResolvedService)
+                    return Promise.value(aResolvedService)
                 }
             }
             else {
-                return Promise(value: nil)          // Default service not found, or there is more than one
+                return Promise.value(nil)          // Default service not found, or there is more than one
             }
-        }.always {
+        }.ensure {
             serviceBrowser.delegate = nil
         }
     }
@@ -77,25 +76,25 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
 }
 
 public class ServiceAddressResolver: NSObject, NetServiceDelegate {
-    var resolve: ((NetService?) -> Void)? = nil
+    var fulfill: ((NetService?) -> Void)? = nil
     
     public func resolveServiceAddress(service: NetService, timeout: TimeInterval = 4) -> Promise<NetService?> {
         service.delegate = self
         service.resolve(withTimeout: timeout)
         
-        return Promise() { resolve, reject in
-            self.resolve = resolve
-        }.always {
+        return Promise() { seal in
+            self.fulfill = seal.fulfill
+        }.ensure {
             service.delegate = nil
-            self.resolve = nil
+            self.fulfill = nil
         }
     }
     
     public func netServiceDidResolveAddress(_ sender: NetService) {
-        self.resolve?(sender)
+        self.fulfill?(sender)
     }
     
     public func netService(_ sender: NetService, didNotResolve errorDict: [String : NSNumber]) {
-        self.resolve?(nil)
+        self.fulfill?(nil)
     }
 }

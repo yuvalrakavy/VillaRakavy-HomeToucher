@@ -29,8 +29,8 @@ extension Collection where Iterator.Element == UInt8, Index == Int {
         var index = 0
         var result: [String:String] = [:]
         
-        func getLength(at index: Self.Index) -> Self.IndexDistance {
-            return ((Int(self[index]) << 8) + Int(self[index+1])) as! Self.IndexDistance
+        func getLength(at index: Self.Index) -> Int {
+            return ((Int(self[index]) << 8) + Int(self[index+1]))
         }
         
         func getString(at i: Self.Index) -> (String?, Self.Index) {

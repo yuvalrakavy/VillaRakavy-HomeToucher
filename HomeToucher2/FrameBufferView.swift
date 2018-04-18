@@ -48,8 +48,12 @@ class FrameBufferView : UIView, FrameBitmapView {
         get {
             let scale = self.lowRes ? 1 : self.contentScaleFactor
             
-            return UIEdgeInsets(top: self.safeAreaInsets.top * scale, left: self.safeAreaInsets.left * scale,
-                                bottom: self.safeAreaInsets.bottom * scale, right: self.safeAreaInsets.right * scale)
+            if #available(iOS 11.0, *) {
+                return UIEdgeInsets(top: self.safeAreaInsets.top * scale, left: self.safeAreaInsets.left * scale,
+                                    bottom: self.safeAreaInsets.bottom * scale, right: self.safeAreaInsets.right * scale)
+            } else {
+                return UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+            }
         }
     }
     

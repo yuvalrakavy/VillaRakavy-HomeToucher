@@ -113,7 +113,7 @@ public extension Promise {
      Blocks this thread, so—you know—don’t call this on a serial thread that
      any part of your chain may use. Like the main thread for example.
      */
-    public func wait() throws -> T {
+    func wait() throws -> T {
 
         if Thread.isMainThread {
             Swift.print("PromiseKit: warning: `wait()` called on main thread!")

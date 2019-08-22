@@ -86,7 +86,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     }
     
     public func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
-        if let index = list.index(where: { entry in entry.info.name == service.name }) {
+        if let index = list.firstIndex(where: { entry in entry.info.name == service.name }) {
             list.remove(at: index)
         }
         
@@ -144,11 +144,11 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
         }
     }
     
-    public func tableView(_: UITableView, commit editingStyle: UITableViewCellEditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == UITableViewCellEditingStyle.delete && indexPath.section == 0 {
+    public func tableView(_: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+        if editingStyle == UITableViewCell.EditingStyle.delete && indexPath.section == 0 {
             delegate?.removeHomeTouchManager(name: list[indexPath.row].info.name)
             list.remove(at: indexPath.row)
-            homeTouchManagerServiceTable?.deleteRows(at: [indexPath], with: UITableViewRowAnimation.automatic)
+            homeTouchManagerServiceTable?.deleteRows(at: [indexPath], with: UITableView.RowAnimation.automatic)
         }
     }
     

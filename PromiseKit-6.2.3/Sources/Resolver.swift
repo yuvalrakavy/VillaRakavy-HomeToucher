@@ -21,11 +21,11 @@ public extension Resolver {
         box.seal(.rejected(error))
     }
 
-    public func resolve(_ result: Result<T>) {
+    func resolve(_ result: Result<T>) {
         box.seal(result)
     }
 
-    public func resolve(_ obj: T?, _ error: Error?) {
+    func resolve(_ obj: T?, _ error: Error?) {
         if let error = error {
             reject(error)
         } else if let obj = obj {
@@ -35,7 +35,7 @@ public extension Resolver {
         }
     }
 
-    public func resolve(_ obj: T, _ error: Error?) {
+    func resolve(_ obj: T, _ error: Error?) {
         if let error = error {
             reject(error)
         } else {
@@ -43,7 +43,7 @@ public extension Resolver {
         }
     }
 
-    public func resolve(_ error: Error?, _ obj: T?) {
+    func resolve(_ error: Error?, _ obj: T?) {
         resolve(obj, error)
     }
 }

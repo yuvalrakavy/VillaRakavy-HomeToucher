@@ -105,7 +105,7 @@ public class HomeTouchModel {
     }
     
     static func decode<T>(data: Data) -> T {
-        return data.withUnsafeBytes {(ptr: UnsafePointer<T>) -> T in ptr.pointee }
+        return data.withUnsafeBytes { $0.load(as: T.self)}
     }
     
     static func getDestinationIpV4address(homeTouchManagerService: NetService) -> Data? {

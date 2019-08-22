@@ -27,12 +27,12 @@ public class RemoteFrameBufferSession {
     private var view: FrameBitmapView
     private var frameBufferInfo: FrameBufferInfo?
 
-    private let press = PromisedQueue<(hitPoint: CGPoint, state: UIGestureRecognizerState)>()
+    private let press = PromisedQueue<(hitPoint: CGPoint, state: UIGestureRecognizer.State)>()
     private let tap = PromisedQueue<CGPoint>()
     
     let apiEncoding: Int32 = 100           // Encoding used for API calls
     
-    private var onPress: ((CGPoint, UIGestureRecognizerState) -> Void)?
+    private var onPress: ((CGPoint, UIGestureRecognizer.State) -> Void)?
     private var onTap: ((_ hitPoint: CGPoint) -> Void)?
     
     private var activeSession: SessionInfo?

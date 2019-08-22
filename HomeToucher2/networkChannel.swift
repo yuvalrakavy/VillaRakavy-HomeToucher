@@ -99,8 +99,8 @@ public class NetworkChannel : NSObject, StreamDelegate {
             input.delegate = self
             output.delegate = self
             
-            input.schedule(in: RunLoop.main, forMode: .defaultRunLoopMode)
-            output.schedule(in: RunLoop.main, forMode: .defaultRunLoopMode)
+            input.schedule(in: RunLoop.main, forMode: RunLoop.Mode.default)
+            output.schedule(in: RunLoop.main, forMode: RunLoop.Mode.default)
             
             input.open()
             output.open()
@@ -139,7 +139,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
     }
     
     private func deinitStream(stream: Stream) {
-        stream.remove(from: RunLoop.main, forMode: .defaultRunLoopMode)
+        stream.remove(from: RunLoop.main, forMode: RunLoop.Mode.default)
         stream.close()
         stream.delegate = nil
     }

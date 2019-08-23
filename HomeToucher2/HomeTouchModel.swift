@@ -108,12 +108,18 @@ public class HomeTouchModel {
         return data.withUnsafeBytes { $0.load(as: T.self)}
     }
     
+    struct AddressInfo {
+        var length: UInt8
+        var family: UInt8
+    }
+    
     static func getDestinationIpV4address(homeTouchManagerService: NetService) -> Data? {
         if let addresses = homeTouchManagerService.addresses {
             for addressData in addresses {
-                let addr: sockaddr_storage = HomeTouchModel.decode(data: addressData)
+                let addressInfo: AddressInfo = HomeTouchModel.decode(data: addressData)
+                //let addr: sockaddr_storage = HomeTouchModel.decode(data: addressData)
                 
-                if addr.ss_family == UInt8(AF_INET) {
+                if addressInfo.family == UInt8(AF_INET) {
                     return addressData;
                 }
             }

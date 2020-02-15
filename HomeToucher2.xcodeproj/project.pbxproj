@@ -3,10 +3,13 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 48;
+	objectVersion = 52;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7E00CFEF23EC51CB0071CE1D /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */; };
+		7E0A24042336CC84003F02DD /* PromiseKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; };
+		7E0A24052336CC84003F02DD /* PromiseKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7E3FCE531DC9E7A000E14995 /* FrameBufferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */; };
 		7E3FCE5A1DCA4BDC00E14995 /* PromisedLand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */; };
 		7E5269941E054CEC0080143A /* PropertiesBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5269931E054CEC0080143A /* PropertiesBytes.swift */; };
@@ -19,6 +22,8 @@
 		7EC4747C1E0AE10B00FCED0C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 7EC4747A1E0AE10B00FCED0C /* InfoPlist.strings */; };
 		7EC4747F1E0AE12E00FCED0C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 7EC4747D1E0AE12E00FCED0C /* InfoPlist.strings */; };
 		7EC9E0251E40E35800548B0A /* Beacon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EC9E0241E40E35800548B0A /* Beacon.swift */; };
+		7ECF98AE23F0115E00D6643F /* Util.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECF98AD23F0115E00D6643F /* Util.swift */; };
+		7ECF98B023F1C02400D6643F /* FrameUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECF98AF23F1C02400D6643F /* FrameUpdater.swift */; };
 		7EE6B07D1DC77702001BB837 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B07C1DC77702001BB837 /* AppDelegate.swift */; };
 		7EE6B0821DC77702001BB837 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 7EE6B0801DC77702001BB837 /* Main.storyboard */; };
 		7EE6B0841DC77702001BB837 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7EE6B0831DC77702001BB837 /* Assets.xcassets */; };
@@ -27,18 +32,16 @@
 		7EE6B0931DC777A5001BB837 /* HomeTouchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B08F1DC777A5001BB837 /* HomeTouchModel.swift */; };
 		7EE6B0941DC777A5001BB837 /* HomeTouchViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B0901DC777A5001BB837 /* HomeTouchViewController.swift */; };
 		7EE6B0951DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B0911DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift */; };
-		7EECE6C1230F541300151773 /* PromiseKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; };
-		7EECE6C2230F541300151773 /* PromiseKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		7EECE6C3230F541300151773 /* Embed Frameworks */ = {
+		7E0A24062336CC85003F02DD /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				7EECE6C2230F541300151773 /* PromiseKit.framework in Embed Frameworks */,
+				7E0A24052336CC84003F02DD /* PromiseKit.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -46,6 +49,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheManager.swift; sourceTree = "<group>"; };
 		7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; lineEnding = 0; path = FrameBufferView.swift; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
 		7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PromisedLand.swift; sourceTree = "<group>"; };
 		7E5269931E054CEC0080143A /* PropertiesBytes.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PropertiesBytes.swift; sourceTree = "<group>"; };
@@ -60,6 +64,8 @@
 		7EC474841E0AF32C00FCED0C /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = he.lproj/Main.strings; sourceTree = "<group>"; };
 		7EC4BCC21E25674B00D0A4A6 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
 		7EC9E0241E40E35800548B0A /* Beacon.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Beacon.swift; sourceTree = "<group>"; };
+		7ECF98AD23F0115E00D6643F /* Util.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Util.swift; sourceTree = "<group>"; };
+		7ECF98AF23F1C02400D6643F /* FrameUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameUpdater.swift; sourceTree = "<group>"; };
 		7EE6B0791DC77702001BB837 /* HomeToucher2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HomeToucher2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7EE6B07C1DC77702001BB837 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = HomeToucher2/AppDelegate.swift; sourceTree = SOURCE_ROOT; };
 		7EE6B0811DC77702001BB837 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -78,7 +84,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7EECE6C1230F541300151773 /* PromiseKit.framework in Frameworks */,
+				7E0A24042336CC84003F02DD /* PromiseKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -159,6 +165,9 @@
 				7E7AFF171DF0155C007BF5BE /* PromisedQueue.swift */,
 				7E5269931E054CEC0080143A /* PropertiesBytes.swift */,
 				7EC9E0241E40E35800548B0A /* Beacon.swift */,
+				7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */,
+				7ECF98AD23F0115E00D6643F /* Util.swift */,
+				7ECF98AF23F1C02400D6643F /* FrameUpdater.swift */,
 			);
 			path = HomeToucher2;
 			sourceTree = "<group>";
@@ -173,7 +182,8 @@
 				7EE6B0751DC77702001BB837 /* Sources */,
 				7EE6B0761DC77702001BB837 /* Frameworks */,
 				7EE6B0771DC77702001BB837 /* Resources */,
-				7EECE6C3230F541300151773 /* Embed Frameworks */,
+				7E0A24062336CC85003F02DD /* Embed Frameworks */,
+				7ECF98B123F6B96000D6643F /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -203,7 +213,7 @@
 				};
 			};
 			buildConfigurationList = 7EE6B0741DC77702001BB837 /* Build configuration list for PBXProject "HomeToucher2" */;
-			compatibilityVersion = "Xcode 8.0";
+			compatibilityVersion = "Xcode 11.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -238,6 +248,26 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		7ECF98B123F6B96000D6643F /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n# skip if we run in debug\nif [ \"$CONFIGURATION\" == \"Debug\" ]; then\necho \"Skip frameworks cleaning in debug version\"\nexit 0\nfi\n\nAPP_PATH=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\"\n\n# This script loops through the frameworks embedded in the application and\n# removes unused architectures.\nfind \"$APP_PATH\" -name '*.framework' -type d | while read -r FRAMEWORK\ndo\nFRAMEWORK_EXECUTABLE_NAME=$(defaults read \"$FRAMEWORK/Info.plist\" CFBundleExecutable)\nFRAMEWORK_EXECUTABLE_PATH=\"$FRAMEWORK/$FRAMEWORK_EXECUTABLE_NAME\"\necho \"Executable is $FRAMEWORK_EXECUTABLE_PATH\"\n\nEXTRACTED_ARCHS=()\n\nfor ARCH in $ARCHS\ndo\necho \"Extracting $ARCH from $FRAMEWORK_EXECUTABLE_NAME\"\nlipo -extract \"$ARCH\" \"$FRAMEWORK_EXECUTABLE_PATH\" -o \"$FRAMEWORK_EXECUTABLE_PATH-$ARCH\"\nEXTRACTED_ARCHS+=(\"$FRAMEWORK_EXECUTABLE_PATH-$ARCH\")\ndone\n\necho \"Merging extracted architectures: ${ARCHS}\"\nlipo -o \"$FRAMEWORK_EXECUTABLE_PATH-merged\" -create \"${EXTRACTED_ARCHS[@]}\"\nrm \"${EXTRACTED_ARCHS[@]}\"\n\necho \"Replacing original executable with thinned version\"\nrm \"$FRAMEWORK_EXECUTABLE_PATH\"\nmv \"$FRAMEWORK_EXECUTABLE_PATH-merged\" \"$FRAMEWORK_EXECUTABLE_PATH\"\n\ndone\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		7EE6B0751DC77702001BB837 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -250,10 +280,13 @@
 				7E3FCE531DC9E7A000E14995 /* FrameBufferView.swift in Sources */,
 				7EE6B0931DC777A5001BB837 /* HomeTouchModel.swift in Sources */,
 				7EC9E0251E40E35800548B0A /* Beacon.swift in Sources */,
+				7ECF98AE23F0115E00D6643F /* Util.swift in Sources */,
 				7E7AFF181DF0155C007BF5BE /* PromisedQueue.swift in Sources */,
+				7E00CFEF23EC51CB0071CE1D /* CacheManager.swift in Sources */,
 				7EE6B07D1DC77702001BB837 /* AppDelegate.swift in Sources */,
 				7E83B3641DEB6AD100DA9B23 /* HomeTouchManager.swift in Sources */,
 				7EE6B0921DC777A5001BB837 /* networkChannel.swift in Sources */,
+				7ECF98B023F1C02400D6643F /* FrameUpdater.swift in Sources */,
 				7EE6B0941DC777A5001BB837 /* HomeTouchViewController.swift in Sources */,
 				7E7AFF111DEEDC76007BF5BE /* HomeTouchManagerBrowser.swift in Sources */,
 			);
@@ -421,7 +454,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
-				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
@@ -434,12 +468,14 @@
 				DEVELOPMENT_TEAM = 8362JN58XW;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/Carthage/Build/Mac",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
 				);
 				INFOPLIST_FILE = HomeToucher2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 9.3;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.villarakavy.HomeTouch-Remote";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -453,12 +489,14 @@
 				DEVELOPMENT_TEAM = 8362JN58XW;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/Carthage/Build/Mac",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
 				);
 				INFOPLIST_FILE = HomeToucher2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 9.3;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.villarakavy.HomeTouch-Remote";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

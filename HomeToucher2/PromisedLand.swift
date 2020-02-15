@@ -17,43 +17,63 @@ class PromisedLand {
     // The body function returns a promise that resolve to true if the loop should continue, or false if the loop
     // should be abored
     //
-    public static func loop(_ n: Int, _ body: @escaping (Int) -> Promise<Bool>) -> Promise<Bool> {
+    public static func loop(_ n: Int, on: DispatchQueue? = conf.Q.map, _ body: @escaping (Int) -> Promise<Bool>) -> Promise<Bool> {
         func doLoop(_ count: Int) -> Promise<Bool> {
-            return count == 0 ? Promise.value(true) : body(n - count).then { $0 ? doLoop(count-1) : Promise.value(false) }
+            if count == 0 {
+                return Promise.value(true)
+            }
+            else {
+                return Promise<Bool>(resolver: { r in
+                    body(n-count).done(on: on) { (bodyResult : Bool) in
+                        if(bodyResult) {
+                            doLoop(count-1).done(on: on) {doLoopResult in r.fulfill(doLoopResult) }.catch { r.reject($0) }
+                        }
+                        else {
+                            r.fulfill(false)
+                        }
+                    }.catch { r.reject($0) }
+                })
+            }
         }
        
         return doLoop(n)
     }
     
-    public static func iterate<T: Sequence>(_ iteratable: T, _ body: @escaping (T.Iterator.Element) -> Promise<Bool>) -> Promise<Bool> {
+    public static func iterate<T: Sequence>(_ iteratable: T, on: DispatchQueue? = conf.Q.map, _ body: @escaping (T.Iterator.Element) -> Promise<Bool>) -> Promise<Bool> {
         var iterator = iteratable.makeIterator()
         
         func nextItem() -> Promise<Bool> {
-            if let item = iterator.next() {
-                return body(item).then { $0 ? nextItem() : Promise.value(false) }
-            }
-            else {
-                return Promise.value(true)               // loop was completed
-            }
+            return Promise<Bool>(resolver: { r in
+                if let item = iterator.next() {
+                    body(item).done(on: on) {(bodyResult: Bool) in
+                        if bodyResult {
+                            nextItem().done(on: on) { nextItemResult in r.fulfill(nextItemResult) }.catch {r.reject($0) }
+                        }
+                        else {
+                            r.fulfill(false)
+                        }
+                    }.catch { r.reject($0)}
+                }
+            })
         }
         
         return nextItem()
     }
     
-    public static func doWhile(_ optionalTitle: String?, _ body: @escaping () -> Promise<Bool>) -> Promise<Bool> {
+    public static func doWhile(_ optionalTitle: String?, on: DispatchQueue? = conf.Q.map, _ body: @escaping () -> Promise<Bool>) -> Promise<Bool> {
         func doIt() -> Promise<Bool> {
-            let title = optionalTitle ?? ""
-            
-            #if LOG_PROMISED_LAND
-            NSLog("doWhile \(title): invoke body")
-            #endif
-            
-            return body().then { (doMore: Bool) -> Promise<Bool> in
-                #if LOG_PROMISED_LAND
-                NSLog("doWhile \(title): body returned \(doMore)")
-                #endif
-                return doMore ? doIt() : Promise.value(true)
-            }
+            return Promise<Bool>(resolver: { r in
+                body().done(on: nil) { (bodyResult : Bool) in
+                    if(bodyResult) {
+                        doIt().done(on: on) {
+                            doItResult in r.fulfill(doItResult)
+                        }.catch { r.reject($0) }
+                    }
+                    else {
+                        r.fulfill(true)
+                    }
+                }.catch { r.reject($0) }
+            })
         }
 
         return doIt()

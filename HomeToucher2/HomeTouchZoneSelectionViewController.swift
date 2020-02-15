@@ -22,10 +22,11 @@ public typealias ZoneInfo = (name: String, geoDescription: String?)
 public protocol HomeTouchZoneSelectionDelegate {
     var geoSelectDelegate: GeoSelectDelegate? { get }
     var beaconDelegate: BeaconDelegate? { get }
+    var cacheManager: CacheManager { get }
     
     var model : HomeTouchModel { get }
     func selectedHomeTouchManager(service: NetService)
-    func selectedHomeTouchManager(name: String)
+    func selectedHomeTouchManager(name: String, dismiss: Bool)
     func removeHomeTouchManager(name: String)
     func homeTouchManagerSelectionCanceled()
     
@@ -96,7 +97,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     }
     
     public func numberOfSections(in tableView: UITableView) -> Int {
-        return 3
+        return 4
     }
     
     public func tableView(_: UITableView, numberOfRowsInSection: Int) -> Int {
@@ -127,6 +128,18 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
             return cell!
         }
         else if indexPath.section == 1 {
+            let aCell = tableView.dequeueReusableCell(withIdentifier: "cacheControl") as? CacheControlCell
+            
+            if let cell = aCell, let info = delegate?.cacheManager.getInfo(), let model = delegate?.model {
+                cell.cacheInfoLabel.text = "(\(info.nItems) \(info.nItems == 1 ? "item" : "items"), \(info.cacheSize) bytes)"
+                cell.cacheLabel.isEnabled = !model.DisableCaching
+                cell.cacheInfoLabel.isEnabled = !model.DisableCaching
+                cell.cacheEnableSwitch.isOn = !model.DisableCaching
+            }
+            
+            return aCell!
+        }
+        else if indexPath.section == 2 {
             let cell = tableView.dequeueReusableCell(withIdentifier: "geoEnable") as? GeoSelectCell
             
             cell?.delegate = self.delegate?.geoSelectDelegate
@@ -160,7 +173,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
                 self.delegate?.selectedHomeTouchManager(service: service)
             }
             else {
-                self.delegate?.selectedHomeTouchManager(name: entry.info.name)
+                self.delegate?.selectedHomeTouchManager(name: entry.info.name, dismiss: true)
             }
         }
     }
@@ -219,6 +232,23 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
         homeTouchManagerServiceTable?.delegate = nil
         serviceBrowser?.delegate = nil
     }
+    
+    @IBAction func onClearCache(_ sender: Any) {
+        delegate?.cacheManager.clearCache()
+        homeTouchManagerServiceTable?.reloadData()
+    }
+    
+    @IBAction func onSwitchEnableCaching(_ sender: Any) {
+        if let sw = sender as? UISwitch, let model = delegate?.model, let delegate = self.delegate {
+            model.DisableCaching = !sw.isOn
+            
+            if let currentManagerName = delegate.getCurrentHomeTouchManagerName() {
+                delegate.selectedHomeTouchManager(name: currentManagerName, dismiss: false)
+            }
+            
+            homeTouchManagerServiceTable?.reloadData()
+        }
+    }
 }
 
 public class ZoneEntry : UITableViewCell {
@@ -244,10 +274,19 @@ public class GeoSelectCell : UITableViewCell {
     }
     
     func update() {
-        self.geoSelectSwitch.isEnabled = self.delegate?.getLocationAuthorizationStatus() ?? false
-        self.label.isEnabled = self.delegate?.getLocationAuthorizationStatus() ?? false
-        self.geoSelectSwitch.isOn = self.delegate?.isGeoSelectEnabled() ?? false
+        if let delegate = self.delegate {
+            self.geoSelectSwitch.isEnabled = delegate.getLocationAuthorizationStatus()
+            self.label.isEnabled = delegate.getLocationAuthorizationStatus()
+            self.geoSelectSwitch.isOn = delegate.isGeoSelectEnabled()
+        }
     }
+}
+
+public class CacheControlCell : UITableViewCell {
+    
+    @IBOutlet weak var cacheLabel: UILabel!
+    @IBOutlet weak var cacheInfoLabel: UILabel!
+    @IBOutlet weak var cacheEnableSwitch: UISwitch!
 }
 
 public class iBeaconCell : UITableViewCell {

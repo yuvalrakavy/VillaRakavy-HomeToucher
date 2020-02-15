@@ -18,6 +18,7 @@ let geoSelectEnabledKey = "GeoSelectEnabled"
 let beaconStateKey = "BeaconState"
 let beaconMajorKey = "BeaconMajor"
 let beaconMinorKey = "BeaconMinor"
+let disableCaching = "DisableCaching"
 
 public typealias GeoLocation = (longitude: Double, latitude: Double)
 public typealias iBeaconInfo = (major: UInt16, minor: UInt16)
@@ -58,6 +59,30 @@ public class HomeTouchModel {
         }
     }
 
+    private var _disableCaching: Bool?
+    
+    public var DisableCaching: Bool {
+        get {
+            if let result = self._disableCaching {
+                return result
+            }
+            else {
+                self._disableCaching = UserDefaults().bool(forKey: disableCaching)
+                return self._disableCaching ?? false
+            }
+        }
+        
+        set {
+            if newValue != self._disableCaching {
+                let store = UserDefaults()
+                
+                self._disableCaching = newValue
+                store.setValue(newValue, forKey: disableCaching)
+                store.synchronize()
+            }
+        }
+    }
+    
     public var lastGeoSelectedDomain: String?
 
     // If lowRes is true, then the resolution is in points and not pixel, e.g. on retina display the bitmaps will be

@@ -12,7 +12,7 @@ import PromiseKit
 
 public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
     private typealias ServiceInfo = (service: NetService, more: Bool)
-    private var foundService: PromisedQueue<Bool>? = PromisedQueue()
+    private var foundService: PromisedQueue<Bool>? = PromisedQueue("services")
     
     private var theService: NetService?
     private let defaultManagerName: String?

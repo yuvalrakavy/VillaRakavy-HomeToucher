@@ -10,42 +10,66 @@ import Foundation
 import PromiseKit
 
 public class PromisedQueue<T> {
-    public var queue: [T] = []
-    var fulfill: ((T) -> Void)? = nil
-    var reject: ((Error) -> Void)? = nil
-    var promise: Promise<T>?
+    public enum QueueEntry {
+        case Value(T)
+        case Error(Error)
+    }
+    public var queue: [QueueEntry] = []
+    
+    var fulfill: ((Bool) -> Void)? = nil
+    
+    let queueName: String
+    let debugLevel: Int
+    
+    init(_ queueName: String, debugLevel: Int = 0) {
+        self.queueName = queueName
+        self.debugLevel = debugLevel
+    }
+    
+    private func debug(_ message: String, minDebugLevel: Int = 1) {
+        if(self.debugLevel >= minDebugLevel) {
+            NSLog(message)
+        }
+    }
     
     public func wait() -> Promise<T> {
-        
-        if self.promise == nil {
-            self.promise = Promise<T>(resolver: { seal in
-                self.fulfill = seal.fulfill
-            })
-            
-            self.sendNext()
+        debug("\(queueName) Enter wait")
+
+        func dequeueValue() -> Promise<T> {
+            switch self.queue.removeFirst() {
+            case .Value(let v): return Promise.value(v)
+            case .Error(let e): return Promise.init(error: e)
+            }
         }
         
-        return self.promise!.map { v in
-            self.promise = nil
-            return v
+        if !self.queue.isEmpty {
+            return dequeueValue()
+        }
+        else {
+            return Promise<Bool>(resolver: { r in
+                self.fulfill = r.fulfill
+            }).then { _ in
+                return dequeueValue()
+            }
+        }
+    }
+    
+    func signalQueue() {
+        if let fulfill = self.fulfill {
+            fulfill(true)
+            self.fulfill = nil
         }
     }
     
     public func send(_ item: T) {
-        self.queue.append(item)
-        self.sendNext()
+        debug("\(queueName) Send \(item)")
+        self.queue.append(.Value(item))
+        signalQueue()
     }
     
     public func error(_ error: Error) {
-        self.reject?(error)
-    }
-    
-    private func sendNext() {
-        if let resolve = self.fulfill, self.queue.count > 0 {
-            let item = self.queue.removeFirst()
-            
-            self.fulfill = nil
-            resolve(item)
-        }
+        debug("\(queueName) error \(error)")
+        self.queue.append(.Error(error))
+        signalQueue()
     }
 }

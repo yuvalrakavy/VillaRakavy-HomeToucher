@@ -15,7 +15,7 @@ public typealias HostAddress = (hostname: String, port: Int)
 public class HomeTouchManager {
     private var serverAddress: Data
     private var resolveRecievedData: ((Data) -> Void)?
-    private let receivedData = PromisedQueue<Data?>()
+    private let receivedData = PromisedQueue<Data?>("receivedData")
     private var screenSize: CGSize
     private var safeAreaInsets: UIEdgeInsets
     
@@ -27,6 +27,11 @@ public class HomeTouchManager {
     }
     
     public func getServer(timeout: TimeInterval = 2.0, retryCount: Int = 3) -> Promise<HostAddress?> {
+        
+        // Uncomment the following line to force connection to a given host (for example, when you need
+        // to connect to a specific instance of server that is in development staging
+        //return Promise.value(("10.0.2.38", 5901))
+        
         var result: HostAddress? = nil
         let me = Unmanaged.passUnretained(self).toOpaque().assumingMemoryBound(to: HomeTouchManager.self)
         var context = CFSocketContext(version: 0, info: me, retain: nil, release: nil, copyDescription: nil)

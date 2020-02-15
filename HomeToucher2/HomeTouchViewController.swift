@@ -26,11 +26,13 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     var terminateRfbSessions: (() -> Void)? = nil
     var delayedStateLabel: DelayedLabel? = nil
     
-    let homeTouchManagerServiceSelected = PromisedQueue<NetService?>()
-    let deviceShaken = PromisedQueue<Bool>()
+    let homeTouchManagerServiceSelected = PromisedQueue<NetService?>("service-selected")
+    let deviceShaken = PromisedQueue<Bool>("device-shaken")
 
     let locationManager = CLLocationManager()
     var currentLocation: CLLocation?
+    
+    let cacheManager: CacheManager
     
     var beacon: Beacon?
     
@@ -41,6 +43,17 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     var beaconDelegate: BeaconDelegate? { get { return self.beacon }}
     var geoSelectDelegate: GeoSelectDelegate? { get { return self }}
     
+    required init?(coder: NSCoder) {
+        do {
+            self.cacheManager = try CacheManager()
+        } catch {
+            NSLog("Error while initializing cache manager \(error)")
+            fatalError()
+        }
+        
+        super.init(coder: coder)
+    }
+        
     func getRfbServer(cancellationPromise: Promise<Bool>) -> Promise<HostAddress> {
         let ensureHasDefaultHometouchService = model.homeTouchManagerServiceName == nil ?
           self.ensureHasHometouchService() : Promise.value(true)
@@ -148,7 +161,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
         
         return PromisedLand.doWhile("handle RFB session", cancellationPromise: cancellationPromise) { () in
             func doTheSession(_ serverAddress: HostAddress) -> Promise<Bool> {
-                self.activeRfbSession = RemoteFrameBufferSession(frameBitmapView: self.frameBufferView)
+                self.activeRfbSession = RemoteFrameBufferSession(model: self.model, frameBitmapView: self.frameBufferView, cacheManager: self.cacheManager)
                 self.activeRfbSession?.onApiCall = self.dispatchApi
                 
                 for r in self.activeRfbSession!.getRecognizers() {
@@ -238,14 +251,16 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
         }
     }
 
-    func selectedHomeTouchManager(name: String) {
-        self.dismiss(animated: true, completion: nil)
+    func selectedHomeTouchManager(name: String, dismiss: Bool) {
+        if dismiss {
+            self.dismiss(animated: true, completion: nil)
+        }
         self.zoneSelectionController = nil
         self.changeCurrentHometouchManager(name: name)
     }
     
     func selectedHomeTouchManager(service: NetService) {
-        selectedHomeTouchManager(name: service.name)
+        selectedHomeTouchManager(name: service.name, dismiss: true)
     }
     
     func getHomeTouchManagerNames() -> [String] {
@@ -309,7 +324,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
                 }
             }
             
-            if let geoSelectedDomain = maybeGeoSelectedDomain, (self.model.lastGeoSelectedDomain == nil || self.model.lastGeoSelectedDomain == self.model.homeTouchManagerServiceName) {
+            if let geoSelectedDomain = maybeGeoSelectedDomain, (self.model.lastGeoSelectedDomain == nil || self.model.lastGeoSelectedDomain != self.model.homeTouchManagerServiceName) {
                 self.model.lastGeoSelectedDomain = geoSelectedDomain
                 
                 NSLog("Select new domain \(geoSelectedDomain) - due to location change")

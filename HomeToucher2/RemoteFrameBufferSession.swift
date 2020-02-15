@@ -24,27 +24,47 @@ public protocol FrameBitmapView {
 }
 
 public class RemoteFrameBufferSession {
-    private var view: FrameBitmapView
-    private var frameBufferInfo: FrameBufferInfo?
+    internal var model: HomeTouchModel
+    internal var view: FrameBitmapView
+    internal var frameBufferInfo: FrameBufferInfo?
 
-    private let press = PromisedQueue<(hitPoint: CGPoint, state: UIGestureRecognizer.State)>()
-    private let tap = PromisedQueue<CGPoint>()
+    private let press = PromisedQueue<(hitPoint: CGPoint, state: UIGestureRecognizer.State)>("press")
+    private let tap = PromisedQueue<CGPoint>("tap")
+    private let cacheManager: CacheManager
     
-    let apiEncoding: Int32 = 100           // Encoding used for API calls
+    let debugLevel = 1
+    
+    let apiEncoding: Int32 = 102                  // Encoding used for API calls (fixed version, old encoding (100) is obsolite)
+    let clientSideCachingEncoding: Int32 = 101    // Encoding used for client side caching
+    
+    let invokeApiMessage: UInt8 = 100
+    let frameUpdateExtensionMessage: UInt8 = 101  // Message from server: frame update with length and hash (and optionally data)
+    let sendFrameDataRequest: UInt8 = 101         // client asks server to send/drop frame update data
     
     private var onPress: ((CGPoint, UIGestureRecognizer.State) -> Void)?
     private var onTap: ((_ hitPoint: CGPoint) -> Void)?
     
     private var activeSession: SessionInfo?
     
-    init(frameBitmapView: FrameBitmapView) {
+    let initializationStopwatch = StopWatch("Initialization")
+    
+    init(model: HomeTouchModel, frameBitmapView: FrameBitmapView, cacheManager: CacheManager) {
+        self.model = model
         self.view = frameBitmapView
         self.activeSession = nil
         self.serverApiVersion = nil
+        self.cacheManager = cacheManager
+    }
+    
+    func debug(_ message: String, minDebugLevel: Int = 1) {
+        if(self.debugLevel >= minDebugLevel) {
+            NSLog(message)
+        }
     }
     
     public func begin(server: String, port: Int, onSessionStarted: (() -> Void)? = nil) -> Promise<Bool> {
-        NSLog("Starting RFB session")
+        debug("Starting RFB session")
+        initializationStopwatch.start()
         
         func runSession(_ networkChannel: NetworkChannel) -> Promise<Bool> {
             let (cancellationPromise, cancel) = PromisedLand.getCancellationPromise()
@@ -56,7 +76,7 @@ public class RemoteFrameBufferSession {
                     self.handleGestures(networkChannel: networkChannel, cancellationPromise: cancellationPromise),
                     self.handleServerInput(networkChannel: networkChannel, cancellationPromise: cancellationPromise)
                 ]
-                ).map { _ in
+            ).map { _ in
                     networkChannel.disconnect()
                     self.view.freeFrameFrameBitmap()
                     return true
@@ -74,7 +94,7 @@ public class RemoteFrameBufferSession {
     }
     
     public func terminate() {
-        NSLog("RFBsession.terminate")
+        debug("RFBsession.terminate")
         if let session = self.activeSession {
             self.serverApiVersion = nil
             self.activeSession = nil
@@ -93,6 +113,7 @@ public class RemoteFrameBufferSession {
     
     public func invokeApi(parameters: [String: String]) {
         if let _ = self.serverApiVersion {
+            debug("Sending InvokeAPI parameters: \(parameters)", minDebugLevel: 2)
             _ = self.activeSession?.networkChannel.sendToServer(dataItems: self.formatInvokeApiCommand(parameters: parameters))
         }
     }
@@ -103,6 +124,7 @@ public class RemoteFrameBufferSession {
         let networkChannel = NetworkChannel(server: server, port: port)
         
         func sendUpdateRequestCommand() -> Promise<NetworkChannel> {
+            debug("Sending frameUpdateRequest command", minDebugLevel: 2)
             return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: false))
         }
         
@@ -134,10 +156,27 @@ public class RemoteFrameBufferSession {
             
             return getSessionName(frameBufferInfo)
         }.then(on: nil) { (sessionName: String) -> Promise<NetworkChannel> in
-            NSLog("RFB session name \(sessionName)")
-            return networkChannel.sendToServer(dataItems: self.formatSetEncodingCommand(supportedEncoding: [0, 5 , self.apiEncoding]))     // Raw and Hextile encoding are supported
+            self.debug("RFB session name \(sessionName)")
+            
+            let encodingList = self.model.DisableCaching ?
+                [
+                    5,
+                    0,
+                    self.apiEncoding,
+                ] :
+                [
+                    5,
+                    0,
+                    self.apiEncoding,
+                    self.clientSideCachingEncoding
+                ]
+
+
+            return networkChannel.sendToServer(dataItems: self.formatSetEncodingCommand(supportedEncoding: encodingList))
         }.then(on: nil) { (_ : NetworkChannel) -> Promise<NetworkChannel> in
             sendUpdateRequestCommand()
+        }.recover { err in
+            Promise.init(error: err)
         }
     }
     
@@ -146,7 +185,7 @@ public class RemoteFrameBufferSession {
             let version = [UInt8]("RFB 003.008\n".utf8)
             let serverVersion = String(bytes: serverVersionBytes, encoding: String.Encoding.utf8)!
             
-            NSLog("Sever RFB version \(serverVersion)")
+            self.debug("Sever RFB version \(serverVersion)")
             
             return networkChannel.sendToServer(dataItems: version)
         }
@@ -168,6 +207,8 @@ public class RemoteFrameBufferSession {
             networkChannel.getFromServer(type: UInt32.self)
         }.then(on: nil) { (securityResult : UInt32) -> Promise<NetworkChannel> in
             handleSecurityResult(securityResult)
+        }.recover { err in
+            Promise.init(error: err)
         }
     }
     
@@ -199,38 +240,97 @@ public class RemoteFrameBufferSession {
     }
     
     private func handleServerInput(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
+        initializationStopwatch.report()
         return PromisedLand.doWhile("handleServerInput", cancellationPromise: cancellationPromise) { return self.handleServerReply(networkChannel: networkChannel) }
     }
     
     private func handleServerReply(networkChannel: NetworkChannel) -> Promise<Bool> {
-        func processReply(_ reply: UInt16) -> Promise<Bool> {
-            let replyType = reply.bigEndian
-            
-            if replyType == 0 {    // FrameBuffer update
-                return self.processFrameBufferUpdate(networkChannel: networkChannel).then(on: nil) {_ in
+        func processReply(_ reply: UInt8) -> Promise<Bool> {
+            switch reply {
+                
+            case 0:    // FrameBuffer update
+                debug("Got frameBufferUpdate message from server", minDebugLevel: 2)
+                return self.processFrameBufferUpdate(networkChannel: networkChannel).then(on: nil) {(_: Bool) -> Promise<NetworkChannel> in
                     // After done with updating, ask the server to send the next frame buffer update
+                    self.debug("Send FrameUpdateRequestCommand (incremental: true)", minDebugLevel: 2)
                     return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
-                }.map(on: nil) { (_: NetworkChannel) in
+                }.map(on: nil) { (_: NetworkChannel) -> Bool in
                      true
                 }
-            }
-            else if replyType == UInt16(self.apiEncoding) {
+                
+            case self.frameUpdateExtensionMessage:
+                debug("Got frameBufferUpdateExtension message from server", minDebugLevel: 2)
+                return self.processFrameUpdateExtension(networkChannel: networkChannel).then(on: nil) { (getFrameDataFromServer: Bool) -> Promise<NetworkChannel> in
+                    if getFrameDataFromServer {
+                        self.debug("Send SendFrameDataCommand)", minDebugLevel: 2)
+                        return networkChannel.sendToServer(dataItems: self.formatSendFrameDataCommand())
+                    }
+                    else {
+                        self.debug("Send FrameUpdateRequestCommand (incremental: true)", minDebugLevel: 2)
+                        return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
+                    }
+                }.map(on: nil) { (_: NetworkChannel) in
+                    true
+                }
+            
+            case self.invokeApiMessage:
+                debug("Got invoke API from server", minDebugLevel: 2)
                 return self.processApiCall(networkChannel: networkChannel)
-            }
-            else{
+                
+            default:
                 return Promise<Bool>.value(false)
             }
         }
         
-        return networkChannel.getFromServer(type: UInt16.self).then(on: nil) { (reply: UInt16) -> Promise<Bool> in
+        return networkChannel.getFromServer(type: UInt8.self).then(on: nil) { (reply: UInt8) -> Promise<Bool> in
             return processReply(reply)
-        }.recover { _ in
-            NSLog("handleServerReply - error -- calling self.terminate")
+        }.recover { err in
+            self.debug("handleServerReply - error -- calling self.terminate: \(err)")
             self.terminate()
             return Guarantee.value(false)
         }.then { r in return Promise.value(r) }
     }
 
+    private func processFrameUpdateExtension(networkChannel: NetworkChannel) -> Promise<Bool> {
+        return networkChannel.getFromServer(type: UInt8.self).then { (hasData: UInt8) -> Promise<Bool> in
+            return networkChannel.getFromServer(type: UInt32.self, count: 2).then { (rawHeader: [UInt32]) -> Promise<(key: CacheKey, frameData: Data)?> in
+                let cacheKey = CacheKey(length: rawHeader[0].bigEndian, hashCode: rawHeader[1].bigEndian)
+                
+                if hasData != 0 {
+                    return networkChannel.getFromServer(count: Int(cacheKey.length)).then { (frameData: Data) -> Promise<(key: CacheKey, frameData: Data)?> in
+                        self.cacheManager.add(key: cacheKey, frameData: frameData)
+                        return Promise.value((key: cacheKey, frameData: frameData))
+                    }
+                }
+                else {
+                    let getDataFromCacheStopwatch = StopWatch("Get data from cache")
+                    getDataFromCacheStopwatch.start()
+
+                    if let frameData = self.cacheManager.get(key: cacheKey) {
+                        getDataFromCacheStopwatch.report()
+                        return Promise.value((key: cacheKey, frameData: frameData))
+                    }
+                    else {
+                        getDataFromCacheStopwatch.stop()
+                        return Promise.value(nil)
+                    }
+                }
+            }.then { (keyAndFrameData: (key: CacheKey, frameData: Data)?) -> Promise<Bool> in
+                if let k = keyAndFrameData {        // Got frame data either from cache or from the server
+                    let applyFrameBufferUpdateStopwatch = StopWatch("ApplyFrameData")
+                    
+                    applyFrameBufferUpdateStopwatch.start()
+                    self.applyFrameBufferUpdate(frameData: k.frameData)
+                    applyFrameBufferUpdateStopwatch.report()
+                    return Promise.value(false)     // No need for frame data
+                }
+                else {
+                    return Promise.value(true)      // Need to get frame data
+                }
+            }
+        }
+    }
+    
     private func receiveString(networkChannel: NetworkChannel) -> Promise<String?> {
         return networkChannel.getFromServer(type: UInt16.self).then { (count : UInt16) -> Promise<String?> in
             if count == 0 {
@@ -267,19 +367,23 @@ public class RemoteFrameBufferSession {
     private func processApiCall(networkChannel: NetworkChannel) -> Promise<Bool> {
         var dict = [String:String]()
         
-        return PromisedLand.doWhile("processApiCall") {
-            return self.receiveNameValue(networkChannel: networkChannel).map { maybeNameValuePair in
-                if let nameValuePair = maybeNameValuePair {
-                    dict[nameValuePair.name] = nameValuePair.value
-                    return true
-                }
-                else {
-                    return false
+        return networkChannel.getFromServer(type: UInt8.self).then(on: nil) { _ -> Promise<Bool> in
+            Promise.value(true)
+        }.then (on: nil) { _ -> Promise<Bool> in
+            return PromisedLand.doWhile("processApiCall") {
+                return self.receiveNameValue(networkChannel: networkChannel).map { maybeNameValuePair in
+                    if let nameValuePair = maybeNameValuePair {
+                        dict[nameValuePair.name] = nameValuePair.value
+                        return true
+                    }
+                    else {
+                        return false
+                    }
                 }
             }
         }.then { (_) -> Promise<Bool> in
             self.onApiCall?(dict)
-            NSLog("ProcessApiCall returning Promise.value(true)")
+            self.debug("ProcessApiCall returning Promise.value(true)")
             return Promise.value(true)
         }
     }
@@ -306,6 +410,7 @@ public class RemoteFrameBufferSession {
     private func handleTapGesture(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
         return PromisedLand.doWhile("handleTapGesture", cancellationPromise: cancellationPromise) { () in
             return self.tap.wait().map(on: nil) { hitPoint in
+                self.debug("Send PointerEvent at \(hitPoint)", minDebugLevel: 2)
                 _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: true))
                 _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: false))
                 
@@ -355,6 +460,10 @@ public class RemoteFrameBufferSession {
         return command
     }
     
+    private func formatSendFrameDataCommand() -> [UInt8] {
+        [sendFrameDataRequest]
+    }
+    
     private func formatPointerEvent(hitPoint: CGPoint, buttonDown: Bool) -> [UInt8] {
         var command: [UInt8] = [5, buttonDown ? 1 : 0]
         
@@ -371,7 +480,7 @@ public class RemoteFrameBufferSession {
             return  s.utf16.reduce([UInt8(l >> 8), UInt8(l)]) { result, c in result + [UInt8(c >> 8), UInt8(c)] }
         }
         
-        return parameters.reduce([UInt8(apiEncoding), UInt8(0)]) { result, keyValue in
+        return parameters.reduce([self.invokeApiMessage, UInt8(0)]) { result, keyValue in
             result + getStringBytes(keyValue.key) + getStringBytes(keyValue.value)
         } + [0, 0]
     }
@@ -388,217 +497,27 @@ public class RemoteFrameBufferSession {
         }
     }
     
-    // MARK: Process frame buffer rectangle update
-    
     private func processFrameBufferUpdate(networkChannel: NetworkChannel) -> Promise<Bool> {
-        return networkChannel.getFromServer(type: UInt16.self).then(on: nil) {
-            PromisedLand.loop(Int($0.bigEndian)) { _ in
-                return self.updateRectangle(networkChannel)
-            }
-        }
+        let updater = StreamBufferUpdater(session: self, networkChannel: networkChannel)
+        
+        return updater.apply()
     }
-    
-    private func updateRectangle(_ networkChannel: NetworkChannel) -> Promise<Bool> {
-        return networkChannel.getFromServer(type: RFB_RectangleHeader.self).then(on: nil) { (header) -> Promise<Bool> in
-            let processRectanglePromise: Promise<Bool>
-            
-            switch header.encoding {
-                
-            case 0:
-                processRectanglePromise = self.processRawEncoding(networkChannel, header)
-                
-            case 5:
-                processRectanglePromise = self.processHextileEncoding(networkChannel, header)
-                
-            default:
-                throw FrameBufferViewError.UnsupportedRectangleEncoding
-                
-            }
-            
-            return processRectanglePromise.map(on: nil) { _ in
-                self.view.redisplay(rect: header.rectangle)
-                return true
-            }
-        }
-    }
-    
-    private func processRawEncoding(_ networkChannel: NetworkChannel, _ header: RFB_RectangleHeader) -> Promise<Bool> {
-        let frameBitmap = self.view.frameBitmap
+
+    private func applyFrameBufferUpdate(frameData: Data) {
+        let updater = SynchronousFrameBufferUpdater(session: self, frameUpdateData: frameData)
         
-        if let frameBufferInfo = self.frameBufferInfo {
-            let pixelsToGet = Int(header.height) * Int(header.width)
-           
-            return networkChannel.getFromServer(type: UInt32.self, count: pixelsToGet).map(on: nil) { serverPixels in
-                // Check for special case where the update is for the whole buffer
-                if header.x == 0 && header.y == 0 && UInt16(header.width) == frameBufferInfo.width && UInt16(header.height) == frameBufferInfo.height {
-                    for index in 0 ..< pixelsToGet {
-                        frameBitmap[index] = self.toDevicePixel(serverPixel: serverPixels[index])
-                    }
-                }
-                else {
-                    var destinationOffset = header.y * Int(frameBufferInfo.width) + header.x
-                    var sourceOffset = 0
-                    
-                    for _ in 0 ..< header.height {
-                        for index in 0 ..< header.width {
-                            frameBitmap[destinationOffset + index] = self.toDevicePixel(serverPixel: serverPixels[sourceOffset + index])
-                        }
-                        
-                        sourceOffset += header.width
-                        destinationOffset += Int(frameBufferInfo.width)
-                    }
-                    
-                }
-                return true
-            }
+        do {
+            try updater.apply()
+        } catch {
+            self.debug("Error while decoding frame data \(error)")
         }
-        
-        return Promise<Bool>.value(true)
-    }
-    
-    private func processHextileEncoding(_ networkChannel: NetworkChannel, _ header: RFB_RectangleHeader) -> Promise<Bool> {
-        guard let frameBufferInfo = frameBufferInfo else{
-            return Promise<Bool>.value(false)
-        }
-        
-        let frameBitmap = self.view.frameBitmap
-        let verticalTileCount = (header.height + 15) / 16
-        let horizontalTileCount = (header.width + 15) / 16
-        var forgroundColor: PixelType = 0
-        var backgroundColor: PixelType = 0
-        
-        func processTile(_ networkChannel: NetworkChannel, _ tileRectangle: CGRect) -> Promise<Bool> {
-            
-            func fillSubrect(subrect: CGRect, color: PixelType) {
-                var yOffset = (Int(tileRectangle.origin.y + subrect.origin.y)) * Int(frameBufferInfo.width)
-                
-                for _ in 0 ..< Int(subrect.size.height) {
-                    var offset = yOffset + Int(tileRectangle.origin.x + subrect.origin.x)
-                    
-                    for _ in 0 ..< Int(subrect.size.width) {
-                        frameBitmap[offset] = color
-                        offset += 1
-                    }
-                    
-                    yOffset += Int(frameBufferInfo.width)
-                }
-            }
-            
-            return networkChannel.getFromServer(type: UInt8.self).then(on: nil) { (tileEncoding : UInt8) -> Promise<Bool> in
-                if (tileEncoding & 1) != 0 {        // Tile is in raw encoding
-             
-                    return networkChannel.getFromServer(type: UInt32.self, count: Int(tileRectangle.size.height) * Int(tileRectangle.size.width)).then(on: nil) { (tileContent: [UInt32]) -> Promise<Bool> in
-                        var yOffset = Int(tileRectangle.origin.y) * Int(frameBufferInfo.width)
-                        var tileContentIndex = 0
-                        
-                        for _ in 0 ..< Int(tileRectangle.size.height) {
-                            var offset = yOffset + Int(tileRectangle.origin.x)
-                            
-                            for _ in 0 ..< Int(tileRectangle.size.width) {
-                                frameBitmap[offset] = self.toDevicePixel(serverPixel: tileContent[tileContentIndex])
-                                offset += 1
-                                tileContentIndex += 1
-                            }
-                            
-                            yOffset += Int(frameBufferInfo.width)
-                        }
-                        
-                        return Promise.value(true)
-                    }
-                }
-                else {
-                    var bytesToGet = 0
-                    
-                    bytesToGet += (tileEncoding & 2) != 0 ? MemoryLayout<UInt32>.size : 0       // Background color given
-                    bytesToGet += (tileEncoding & 4) != 0 ? MemoryLayout<UInt32>.size : 0       // Forground color given
-                    bytesToGet += (tileEncoding & 8) != 0 ? MemoryLayout<UInt8>.size : 0        // Subrect count
-                    
-                    let subrectAreColored = (tileEncoding & 16) != 0
-                    
-                    return networkChannel.getFromServer(type: UInt8.self, count: bytesToGet).then(on: nil) { (tileData : [UInt8]) -> Promise<Bool> in
-                        var subrectCount: UInt8 = 0
-                        
-                        tileData.withUnsafeBufferPointer { pTileData in
-                            if let p = UnsafeRawPointer(pTileData.baseAddress) {
-                                var offset = 0
-                                
-                                if (tileEncoding & 2) != 0 {
-                                    backgroundColor = self.toDevicePixel(serverPixel: p.load(fromByteOffset: offset, as: UInt32.self))
-                                    offset += MemoryLayout<UInt32>.size
-                                }
-                                
-                                if (tileEncoding & 4) != 0 {
-                                    forgroundColor = self.toDevicePixel(serverPixel: p.load(fromByteOffset: offset, as: UInt32.self))
-                                    offset += MemoryLayout<UInt32>.size
-                                }
-                                
-                                if (tileEncoding & 8) != 0 {
-                                    subrectCount = p.load(fromByteOffset: offset, as: UInt8.self)
-                                    offset += MemoryLayout<UInt8>.size
-                                }
-                            }
-                        }
-                        
-                        fillSubrect(subrect: CGRect(origin: CGPoint(x: 0, y: 0), size: tileRectangle.size), color: backgroundColor)
-                        
-                        if subrectCount > 0 {
-                            if(subrectAreColored) {
-                                return networkChannel.getFromServer(type: RFB_TileColoredSubrect.self, count: Int(subrectCount)).map(on: nil) { (subrects: [RFB_TileColoredSubrect]) -> Bool in
-                                    for subrect in subrects {
-                                        fillSubrect(subrect: subrect.rectangle, color: self.toDevicePixel(serverPixel: subrect.color))
-                                    }
-                                    
-                                    return true
-                                }
-                            }
-                            else {
-                                return networkChannel.getFromServer(type: RFB_TileSubrect.self, count: Int(subrectCount)).map(on: nil) { (subrects : [RFB_TileSubrect]) -> Bool in
-                                    for subrect in subrects {
-                                        fillSubrect(subrect: subrect.rectangle, color: forgroundColor)
-                                    }
-                                    
-                                    return true
-                                }
-                            }
-                        }
-                        else {
-                            // All the tile is in the same color (background color)
-                            fillSubrect(subrect: CGRect(origin: CGPoint(x: 0, y: 0), size: tileRectangle.size), color: backgroundColor)
-                            return Promise.value(true)
-                        }
-                        
-                    }
-                }
-            }
-        }
-        
-        return PromisedLand.loop(verticalTileCount) { verticalTile in
-            return PromisedLand.loop(horizontalTileCount) { horizontalTile in
-                let xOffset = CGFloat(horizontalTile)*16, yOffset = CGFloat(verticalTile)*16
-                let x = CGFloat(header.x) + xOffset, y = CGFloat(header.y) + yOffset
-                let tileRectangle = CGRect(x: x, y: y, width: min(16, CGFloat(header.width) - xOffset), height: min(16, CGFloat(header.height) - yOffset))
-                
-                return processTile(networkChannel, tileRectangle)
-            }
-        }
-    }
-    
-    private func toDevicePixel(serverPixel: UInt32) -> UInt32 {
-        if let pixelFormat = self.frameBufferInfo?.pixelFormat {
-            let r = (serverPixel >> UInt32(pixelFormat.redShift)) & UInt32(pixelFormat.redMax)
-            let g = (serverPixel >> UInt32(pixelFormat.greenShift)) & UInt32(pixelFormat.greenMax)
-            let b = (serverPixel >> UInt32(pixelFormat.blueShift)) & UInt32(pixelFormat.blueMax)
-            
-            return (b << 16) | (g << 8) | r
-            
-        }
-        
-        return 0;
     }
 }
 
 public enum FrameBufferViewError : Error {
     case UnsupportedRectangleEncoding
+    case OutOfBounds
+    case NoFrameBufferInfo
 }
 
 private struct SessionInfo {
@@ -607,7 +526,7 @@ private struct SessionInfo {
     var cancel: () -> Void
 }
 
-private struct PixelFormat {
+internal struct PixelFormat {
     var bitsPerPixel: UInt8
     var depth: UInt8
     var	bigEndianFlag: UInt8
@@ -623,7 +542,7 @@ private struct PixelFormat {
     var	pad3: UInt8
 }
 
-private struct FrameBufferInfo {
+internal struct FrameBufferInfo {
     var width: UInt16
     var height: UInt16
     var	pixelFormat: PixelFormat
@@ -632,60 +551,3 @@ private struct FrameBufferInfo {
     var size: CGSize { get { return CGSize(width: Int(width), height: Int(height)) } }
 }
 
-private struct RFB_TileSubrect : TileSubrect {
-    var xyPosition: UInt8
-    var widthHeight: UInt8
-}
-
-private struct RFB_TileColoredSubrect: TileSubrect {
-    // 4 UInt8 are used instead of UInt32 to avoid Swift aligning elements on 4 bytes boundries in which array of subrects is no layed out as the data
-    // received from the server
-    var color1: UInt8
-    var color2: UInt8
-    var color3: UInt8
-    var color4: UInt8
-    var xyPosition: UInt8
-    var widthHeight: UInt8
-    
-    var color: UInt32 {
-        get {
-            let c4 = UInt32(color4) << 24
-            let c3 = UInt32(color3) << 16
-            let c2 = UInt32(color2) << 8
-            let c1 = UInt32(color1)
-            
-            return c4 | c3 | c2 | c1
-//            return UInt32((UInt32(color4) << 24) | (UInt32(color3) << 16) | (UInt32(color2) << 8) | UInt32(color1))
-        }
-    }
-}
-
-private protocol TileSubrect {
-    var xyPosition: UInt8 { get }
-    var widthHeight: UInt8 { get }
-}
-
-private extension TileSubrect {
-    var x: Int { get { return Int((xyPosition >> 4) & 0x0f) } }
-    var y: Int { get { return Int(xyPosition & 0x0f) } }
-    
-    var width: Int { get { return Int((widthHeight >> 4) & 0x0f) + 1 } }
-    var height: Int { get { return Int(widthHeight & 0x0f) + 1 } }
-    
-    var rectangle: CGRect { get { return CGRect(x: self.x, y: self.y, width: self.width, height: self.height) } }
-}
-
-private struct RFB_RectangleHeader {
-    private var _x: UInt16
-    private var _y: UInt16
-    private var _width: UInt16
-    private var _height: UInt16
-    private var _encoding: Int32
-    
-    var x: Int { get { return Int(_x.bigEndian) } }
-    var y: Int { get { return Int(_y.bigEndian) } }
-    var width: Int { get { return Int(_width.bigEndian) } }
-    var height: Int { get { return Int(_height.bigEndian) } }
-    var encoding: Int { get { return Int(_encoding.bigEndian) } }
-    var rectangle: CGRect { get { return CGRect(x: x, y:y, width: width, height: height) } }
-}

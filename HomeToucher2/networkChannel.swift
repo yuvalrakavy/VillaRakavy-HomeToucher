@@ -77,7 +77,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
     private var bytesInInputBuffer: Int
    
     private var inputBufferIndex: Int
-    private let gotInputBuffer = PromisedQueue<(byteCount: Int, buffer: UnsafeMutableRawPointer)>()
+    private let gotInputBuffer = PromisedQueue<(byteCount: Int, buffer: UnsafeMutableRawPointer)>("gotInputBuffer")
     
     init(server: String, port: Int) {
         self.server = server
@@ -135,7 +135,12 @@ public class NetworkChannel : NSObject, StreamDelegate {
         self.inputBufferPointer?.deallocate()
         disconnect()
 
-        self.gotInputBuffer.queue.forEach { bufferInfo in bufferInfo.buffer.deallocate() }
+        self.gotInputBuffer.queue.forEach {
+            switch($0) {
+            case .Value(let bufferInfo): bufferInfo.buffer.deallocate()
+            case .Error(_): break
+            }
+        }
     }
     
     private func deinitStream(stream: Stream) {
@@ -146,6 +151,12 @@ public class NetworkChannel : NSObject, StreamDelegate {
   
     public func getFromServer<T>(type: T.Type) -> Promise<T> {
         return self.getFromServer(type: type, count: 1).map(on: nil) { (result: [T]) -> T in result[0] }
+    }
+    
+    public func getFromServer(count: Int) -> Promise<Data> {
+        return getFromServer(type: UInt8.self, count: count).then(on: nil) { bytes in
+            return Promise.value(Data(bytes))
+        }
     }
     
     public func getFromServer<T>(type: T.Type, count: Int) -> Promise<[T]> {
@@ -188,33 +199,42 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 
                 mayDeallocateBuffer()
                 
-                return PromisedLand.doWhile("doGetFromServer") {
-                    return self.gotInputBuffer.wait().map(on: nil) { bufferInfo in
-                        self.inputBufferPointer = bufferInfo.buffer
-                        self.bytesInInputBuffer = bufferInfo.byteCount
-                        self.inputBufferIndex = 0
-                        
-                        let inputBuffer = UnsafeMutableRawBufferPointer(start: self.inputBufferPointer!, count: self.inputBufferSize)
-                        let bytesToProcess = min(bytesToGet - gotSoFar, self.bytesInInputBuffer)
+                return Promise { seal in
+                    PromisedLand.doWhile("doGetFromServer") {
+                        return Promise {seal in
+                            self.gotInputBuffer.wait().map(on: nil) { bufferInfo in
+                                self.inputBufferPointer = bufferInfo.buffer
+                                self.bytesInInputBuffer = bufferInfo.byteCount
+                                self.inputBufferIndex = 0
+                                
+                                let inputBuffer = UnsafeMutableRawBufferPointer(start: self.inputBufferPointer!, count: self.inputBufferSize)
+                                let bytesToProcess = min(bytesToGet - gotSoFar, self.bytesInInputBuffer)
 
-                        self.inputBufferIndex = 0
-                        
-                        for _ in 0 ..< bytesToProcess {
-                            resultBytes[gotSoFar] = inputBuffer[self.inputBufferIndex]
-                            gotSoFar += 1
-                            self.inputBufferIndex += 1
+                                self.inputBufferIndex = 0
+                                
+                                for _ in 0 ..< bytesToProcess {
+                                    resultBytes[gotSoFar] = inputBuffer[self.inputBufferIndex]
+                                    gotSoFar += 1
+                                    self.inputBufferIndex += 1
+                                }
+
+                                mayDeallocateBuffer()
+                                seal.fulfill(gotSoFar < bytesToGet)         // Continue as long as not all needed bytes are in the result bytes buffer
+                            }.catch {
+                                seal.reject($0)
+                            }
                         }
-
-                        mayDeallocateBuffer()
-                        return gotSoFar < bytesToGet         // Continue as long as not all needed bytes are in the result bytes buffer
+                    }.map { _ in
+                        let buffer = UnsafeMutableBufferPointer(start: resultPointer.assumingMemoryBound(to: T.self), count: count)
+                        let theResult = Array(buffer)
+                        
+                        resultPointer.deallocate()
+                        
+                        seal.fulfill(theResult)
+                    }.catch {
+                        NSLog("Error \($0) while waiting for server input")
+                        seal.reject($0)
                     }
-                }.map { _ in
-                    let buffer = UnsafeMutableBufferPointer(start: resultPointer.assumingMemoryBound(to: T.self), count: count)
-                    let theResult = Array(buffer)
-                    
-                    resultPointer.deallocate()
-                    
-                    return theResult
                 }
             }
         }
@@ -280,7 +300,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
     }
     
  
-    // MARK: Intermal write handlers
+    // MARK: Internal write handlers
     
     private func initiateNextWriteRequest() {
         if activeWriteRequest == nil && writeRequestQueue.count > 0 {
@@ -320,6 +340,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 self.gotInputBuffer.error(NetworkChannelError.ReadError)
                 
                 if let activeRequest = activeWriteRequest {
+                    NSLog("rejecting activeRequest.request promise")
                     activeRequest.request.reject(NetworkChannelError.WriteError)
                 }
             }
@@ -342,7 +363,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 while inputStream!.hasBytesAvailable {
                     let buffer = UnsafeMutableRawPointer.allocate(byteCount: self.inputBufferSize, alignment: 8)
                     let count = self.inputStream!.read(buffer.assumingMemoryBound(to: UInt8.self), maxLength: self.inputBufferSize)
-                    
+
                     self.gotInputBuffer.send((byteCount: count, buffer: buffer))
                 }
             }
@@ -350,6 +371,16 @@ public class NetworkChannel : NSObject, StreamDelegate {
             if eventCode.contains(.hasSpaceAvailable) {
                 assert(aStream === outputStream)
                 writeNextChunk()
+            }
+            
+            if eventCode.contains(.endEncountered) {
+                if aStream === inputStream {
+                    NSLog("Unexpected endOfStream on input stream")
+                    self.gotInputBuffer.error(NetworkChannelError.ReadError)
+                }
+                else {
+                    NSLog("Unexpected endOfStream on stream which is not input stream (??)")
+                }
             }
         }
     }

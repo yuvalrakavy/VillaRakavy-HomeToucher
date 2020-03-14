@@ -158,14 +158,14 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
         else if indexPath.section == 4 {
             let aCell = tableView.dequeueReusableCell(withIdentifier: "specificServer") as? SpecificServerCell
             
-            if let cell = aCell, let model = self.delegate?.model {
+            if let cell = aCell {
                 cell.setup(delegate)
             }
             
             return aCell!
         }
         else {
-            assert(false, "Unexpected table section")
+            fatalError("Unexpected table section")
         }
     }
     

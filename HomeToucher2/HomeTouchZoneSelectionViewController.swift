@@ -97,7 +97,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     }
     
     public func numberOfSections(in tableView: UITableView) -> Int {
-        return 4
+        return 5
     }
     
     public func tableView(_: UITableView, numberOfRowsInSection: Int) -> Int {
@@ -146,7 +146,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
             cell?.update()
             return cell!
         }
-        else {
+        else if indexPath.section == 3 {
             let cell = tableView.dequeueReusableCell(withIdentifier: "iBeacon") as? iBeaconCell
             
             if let delegate = self.delegate, let beaconDelegate = delegate.beaconDelegate {
@@ -154,6 +154,18 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
             }
             
             return cell!
+        }
+        else if indexPath.section == 4 {
+            let aCell = tableView.dequeueReusableCell(withIdentifier: "specificServer") as? SpecificServerCell
+            
+            if let cell = aCell, let model = self.delegate?.model {
+                cell.setup(delegate)
+            }
+            
+            return aCell!
+        }
+        else {
+            assert(false, "Unexpected table section")
         }
     }
     
@@ -287,6 +299,39 @@ public class CacheControlCell : UITableViewCell {
     @IBOutlet weak var cacheLabel: UILabel!
     @IBOutlet weak var cacheInfoLabel: UILabel!
     @IBOutlet weak var cacheEnableSwitch: UISwitch!
+}
+
+public class SpecificServerCell : UITableViewCell {
+    var delegate: HomeTouchZoneSelectionDelegate?
+    
+    func setup(_ delegate: HomeTouchZoneSelectionDelegate?) {
+        
+
+        self.delegate = delegate
+        
+        if let model = delegate?.model {
+            self.specificServerSwitch.isOn = model.useSpecificServer
+            self.specificServerAddress.text = model.specificServerAddress
+            self.connectToLabel.isEnabled = model.useSpecificServer
+        }
+    }
+    
+    @IBOutlet weak var specificServerSwitch: UISwitch!
+    @IBOutlet weak var connectToLabel: UILabel!
+    @IBOutlet weak var specificServerAddress: UITextField!
+    
+    @IBAction func specificServerSwitchChanged(_ sender: Any) {
+        self.connectToLabel.isEnabled = self.specificServerSwitch.isOn
+        self.delegate?.model.useSpecificServer = self.specificServerSwitch.isOn
+        
+        if self.specificServerSwitch.isOn {
+            self.delegate?.homeTouchManagerSelectionCanceled()
+        }
+    }
+    
+    @IBAction func specificServerEditingDone(_ sender: Any) {
+        self.delegate?.model.specificServerAddress = self.specificServerAddress.text
+    }
 }
 
 public class iBeaconCell : UITableViewCell {

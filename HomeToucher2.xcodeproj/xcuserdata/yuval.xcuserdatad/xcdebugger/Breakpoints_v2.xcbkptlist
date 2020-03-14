@@ -80,8 +80,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "340"
             endingLineNumber = "340"
-            landmarkName = "getGeoDescription(location:)"
-            landmarkType = "7">
+            landmarkName = "HomeTouchViewController"
+            landmarkType = "3">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -112,9 +112,9 @@
             timestampString = "588247692.9534169"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "178"
-            endingLineNumber = "178"
-            landmarkName = "beaconState"
+            startingLineNumber = "172"
+            endingLineNumber = "172"
+            landmarkName = "specificServerName"
             landmarkType = "24">
          </BreakpointContent>
       </BreakpointProxy>
@@ -131,8 +131,8 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "131"
             endingLineNumber = "131"
-            landmarkName = "HomeTouchModel"
-            landmarkType = "3">
+            landmarkName = "useSpecificServer"
+            landmarkType = "24">
             <Locations>
                <Location
                   uuid = "A7D77B7E-429A-457E-B839-ACAF01D0D745 - f674c2501007ffbc"

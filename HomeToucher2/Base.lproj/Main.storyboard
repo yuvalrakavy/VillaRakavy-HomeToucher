@@ -296,6 +296,44 @@
                                             <outlet property="minorTextField" destination="yvQ-RE-s6A" id="jVu-rc-npK"/>
                                         </connections>
                                     </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" indentationWidth="10" reuseIdentifier="specificServer" id="6UD-0o-1NY" userLabel="SpecificServer" customClass="SpecificServerCell" customModule="HomeToucher2" customModuleProvider="target">
+                                        <rect key="frame" x="0.0" y="255.5" width="568" height="40"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="6UD-0o-1NY" id="AwQ-7O-ovZ">
+                                            <rect key="frame" x="0.0" y="0.0" width="568" height="40"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="iYC-zl-9hl" userLabel="Specific server Switch">
+                                                    <rect key="frame" x="15" y="4" width="49" height="31"/>
+                                                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                                    <connections>
+                                                        <action selector="specificServerSwitchChanged:" destination="6UD-0o-1NY" eventType="valueChanged" id="9Vb-t3-WWO"/>
+                                                    </connections>
+                                                </switch>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="Connect directly to:" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Kv7-MG-ikz">
+                                                    <rect key="frame" x="79" y="9" width="151" height="21"/>
+                                                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <textField opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="c4r-uC-Ra2" userLabel="SpecificServerAddress">
+                                                    <rect key="frame" x="242" y="3" width="311" height="34"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                    <textInputTraits key="textInputTraits" returnKeyType="done"/>
+                                                    <connections>
+                                                        <action selector="specificServerEditingDone:" destination="6UD-0o-1NY" eventType="editingDidEnd" id="z4d-uO-OX0"/>
+                                                    </connections>
+                                                </textField>
+                                            </subviews>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="connectToLabel" destination="Kv7-MG-ikz" id="HBn-5U-jNl"/>
+                                            <outlet property="specificServerAddress" destination="c4r-uC-Ra2" id="Fqi-5T-FuN"/>
+                                            <outlet property="specificServerSwitch" destination="iYC-zl-9hl" id="t22-hB-v2i"/>
+                                        </connections>
+                                    </tableViewCell>
                                 </prototypes>
                             </tableView>
                         </subviews>

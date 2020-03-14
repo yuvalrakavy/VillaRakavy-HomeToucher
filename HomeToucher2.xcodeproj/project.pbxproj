@@ -10,6 +10,8 @@
 		7E00CFEF23EC51CB0071CE1D /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */; };
 		7E0A24042336CC84003F02DD /* PromiseKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; };
 		7E0A24052336CC84003F02DD /* PromiseKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		7E25BABC241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */; };
+		7E25BABD241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7E3FCE531DC9E7A000E14995 /* FrameBufferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */; };
 		7E3FCE5A1DCA4BDC00E14995 /* PromisedLand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */; };
 		7E5269941E054CEC0080143A /* PropertiesBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5269931E054CEC0080143A /* PropertiesBytes.swift */; };
@@ -41,6 +43,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				7E25BABD241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Embed Frameworks */,
 				7E0A24052336CC84003F02DD /* PromiseKit.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
@@ -50,6 +53,7 @@
 
 /* Begin PBXFileReference section */
 		7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheManager.swift; sourceTree = "<group>"; };
+		7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IQKeyboardManagerSwift.framework; path = Carthage/Build/iOS/IQKeyboardManagerSwift.framework; sourceTree = "<group>"; };
 		7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; lineEnding = 0; path = FrameBufferView.swift; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
 		7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PromisedLand.swift; sourceTree = "<group>"; };
 		7E5269931E054CEC0080143A /* PropertiesBytes.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PropertiesBytes.swift; sourceTree = "<group>"; };
@@ -84,6 +88,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E25BABC241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Frameworks */,
 				7E0A24042336CC84003F02DD /* PromiseKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -120,6 +125,7 @@
 		7EC4BCC11E25674B00D0A4A6 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */,
 				7EC4BCC21E25674B00D0A4A6 /* CoreBluetooth.framework */,
 			);
 			name = Frameworks;

@@ -18,7 +18,9 @@ let geoSelectEnabledKey = "GeoSelectEnabled"
 let beaconStateKey = "BeaconState"
 let beaconMajorKey = "BeaconMajor"
 let beaconMinorKey = "BeaconMinor"
-let disableCaching = "DisableCaching"
+let disableCachingKey = "DisableCaching"
+let useSpecificServerKey = "UseSpecificServer"
+let specificServerAddressKey = "SpecificServerAddress"
 
 public typealias GeoLocation = (longitude: Double, latitude: Double)
 public typealias iBeaconInfo = (major: UInt16, minor: UInt16)
@@ -67,7 +69,7 @@ public class HomeTouchModel {
                 return result
             }
             else {
-                self._disableCaching = UserDefaults().bool(forKey: disableCaching)
+                self._disableCaching = UserDefaults().bool(forKey: disableCachingKey)
                 return self._disableCaching ?? false
             }
         }
@@ -77,7 +79,7 @@ public class HomeTouchModel {
                 let store = UserDefaults()
                 
                 self._disableCaching = newValue
-                store.setValue(newValue, forKey: disableCaching)
+                store.setValue(newValue, forKey: disableCachingKey)
                 store.synchronize()
             }
         }
@@ -103,6 +105,82 @@ public class HomeTouchModel {
     
     public var managerLocations: [String: CLLocation]
     
+    
+    private var _useSpecificServer: Bool?
+    
+    public var useSpecificServer: Bool {
+        get {
+            if let r = _useSpecificServer {
+                return r
+            }
+            else {
+                self._useSpecificServer = UserDefaults().bool(forKey: useSpecificServerKey)
+                return self._useSpecificServer ?? false
+            }
+        }
+        
+        set {
+            if newValue != self._useSpecificServer {
+                let store = UserDefaults()
+                
+                self._useSpecificServer = newValue
+                store.setValue(newValue, forKey: useSpecificServerKey)
+                store.synchronize()
+            }
+        }
+    }
+    
+    private var _specificServerAddress : String?
+    
+    public var specificServerAddress : String? {
+        get {
+            if(_specificServerAddress == nil) {
+                self._specificServerAddress = UserDefaults().string(forKey: specificServerAddressKey)
+            }
+            return self._specificServerAddress
+        }
+        
+        set {
+            if newValue != self._specificServerAddress {
+                let store = UserDefaults()
+                
+                self._specificServerAddress = newValue
+                
+                if let v = newValue {
+                    store.setValue(v, forKey: specificServerAddressKey)
+                }
+                else {
+                    store.removeObject(forKey: specificServerAddressKey)
+                }
+                
+                store.synchronize()
+            }
+        }
+    }
+    
+    public var specificServerName: String? {
+        get {
+            if let a = self.specificServerAddress {
+                let columnIndex = a.firstIndex(of: ":") ?? a.endIndex
+                
+                return String(a[..<columnIndex])
+            }
+            else {
+                return nil
+            }
+        }
+    }
+    
+    public var specificServerPort: Int {
+        get {
+            if let a = self.specificServerAddress, let columnIndex = a.firstIndex(of: ":") {
+                return Int(a[a.index(columnIndex, offsetBy: 1) ..< a.endIndex]) ?? 5900
+            }
+            else {
+                return 5900             // Default port
+            }
+        }
+    }
     
     init() {
         let store = UserDefaults();

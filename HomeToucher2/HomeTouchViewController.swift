@@ -61,8 +61,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
         self.frameBufferView.lowRes = model.lowRes
         
         func tryToGetServerAddress() -> Promise<HostAddress> {
-
-            // First the "fast lane" is tried - this assumes that the cached home manager address is valid
+            // Secondly the "fast lane" is tried - this assumes that the cached home manager address is valid
             if let homeTouchManagerAddress = self.model.homeTouchManagerServiceAddress {
                 self.stateLabel.text = NSLocalizedString("LookingForHomeTouchServer", comment: "")
                 return HomeTouchManager(
@@ -86,7 +85,13 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
 
         }
     
-        return ensureHasDefaultHometouchService.then { _ in tryToGetServerAddress()}
+        // First see if there is express lane (specific server is specified)
+        if model.useSpecificServer, let specificServerName = model.specificServerName {
+            return Promise<HostAddress>.value((specificServerName, model.specificServerPort))
+        }
+        else {
+            return ensureHasDefaultHometouchService.then { _ in tryToGetServerAddress()}
+        }
     }
 
     func ensureHasHometouchService() -> Promise<Bool> {
@@ -382,7 +387,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     func handleHometouchManagerChange() {
         _ = PromisedLand.doWhile("handleHometouchManagerChange") {
             return self.homeTouchManagerServiceSelected.wait().map { service in
-                if service != nil {
+                if service != nil || self.model.useSpecificServer {
                     self.activeRfbSession?.terminate()
                 }
                 

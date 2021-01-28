@@ -41,6 +41,8 @@ public class RemoteFrameBufferSession {
     let frameUpdateExtensionMessage: UInt8 = 101  // Message from server: frame update with length and hash (and optionally data)
     let sendFrameDataRequest: UInt8 = 101         // client asks server to send/drop frame update data
     
+    let serverPingInterval =                    5 * 60.0               // Priodically send "setCutText" message to the server to ensure good connection
+    
     private var onPress: ((CGPoint, UIGestureRecognizer.State) -> Void)?
     private var onTap: ((_ hitPoint: CGPoint) -> Void)?
     
@@ -63,11 +65,18 @@ public class RemoteFrameBufferSession {
     }
     
     public func begin(server: String, port: Int, onSessionStarted: (() -> Void)? = nil) -> Promise<Bool> {
+        
         debug("Starting RFB session")
         initializationStopwatch.start()
         
         func runSession(_ networkChannel: NetworkChannel) -> Promise<Bool> {
+            let pingTimer = Timer.scheduledTimer(withTimeInterval: serverPingInterval, repeats: true) {_ in
+                self.debug("Ping: Sending to server")
+                _ = networkChannel.sendToServer(dataItems: self.formatSetCutText(text: ""))
+            }
             let (cancellationPromise, cancel) = PromisedLand.getCancellationPromise()
+            
+            pingTimer.tolerance = 0.5
             
             onSessionStarted?()
             
@@ -77,9 +86,13 @@ public class RemoteFrameBufferSession {
                     self.handleServerInput(networkChannel: networkChannel, cancellationPromise: cancellationPromise)
                 ]
             ).map { _ in
-                    networkChannel.disconnect()
-                    self.view.freeFrameFrameBitmap()
-                    return true
+                return true
+            }.ensure() {
+                networkChannel.disconnect()
+                self.view.freeFrameFrameBitmap()
+                
+                NSLog("Invalidating ping timer")
+                pingTimer.invalidate()
             }
             
             self.activeSession = SessionInfo(networkChannel: networkChannel, sessionPromise: sessionPromise, cancel: cancel)
@@ -471,6 +484,15 @@ public class RemoteFrameBufferSession {
         command.append(contentsOf: toByteArray(UInt16(hitPoint.y).bigEndian))
         
         return command
+    }
+    
+    private func formatSetCutText(text: String) -> [UInt8] {
+        var command: [UInt8] =  [6, 0, 0, 0];
+        
+        command.append(contentsOf: toByteArray(UInt32(text.count).bigEndian));
+        command.append(contentsOf: text.utf8);
+        
+        return command;
     }
     
     private func formatInvokeApiCommand(parameters: [String: String]) -> [UInt8] {

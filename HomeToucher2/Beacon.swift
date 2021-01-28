@@ -18,6 +18,7 @@ public protocol BeaconDelegate {
     func deactivate()
 }
 
+#if BL_BEACON
 class Beacon : NSObject, CBPeripheralManagerDelegate, BeaconDelegate {
     private var _peripheralManager: CBPeripheralManager!
     private var _beaconData : [String : Any]?
@@ -65,3 +66,5 @@ class Beacon : NSObject, CBPeripheralManagerDelegate, BeaconDelegate {
         self.doActivate()
     }
 }
+#endif
+

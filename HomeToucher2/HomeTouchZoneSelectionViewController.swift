@@ -21,7 +21,9 @@ public typealias ZoneInfo = (name: String, geoDescription: String?)
 
 public protocol HomeTouchZoneSelectionDelegate {
     var geoSelectDelegate: GeoSelectDelegate? { get }
+    #if BL_BEACON
     var beaconDelegate: BeaconDelegate? { get }
+    #endif
     var cacheManager: CacheManager { get }
     
     var model : HomeTouchModel { get }
@@ -97,7 +99,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     }
     
     public func numberOfSections(in tableView: UITableView) -> Int {
-        return 5
+        return 4
     }
     
     public func tableView(_: UITableView, numberOfRowsInSection: Int) -> Int {
@@ -147,15 +149,6 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
             return cell!
         }
         else if indexPath.section == 3 {
-            let cell = tableView.dequeueReusableCell(withIdentifier: "iBeacon") as? iBeaconCell
-            
-            if let delegate = self.delegate, let beaconDelegate = delegate.beaconDelegate {
-                cell?.setup(delegate: beaconDelegate, model: delegate.model)
-            }
-            
-            return cell!
-        }
-        else if indexPath.section == 4 {
             let aCell = tableView.dequeueReusableCell(withIdentifier: "specificServer") as? SpecificServerCell
             
             if let cell = aCell {
@@ -163,6 +156,17 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
             }
             
             return aCell!
+        }
+        else if indexPath.section == 4 {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "iBeacon") as? iBeaconCell
+
+            #if BL_BEACON
+            if let delegate = self.delegate, let beaconDelegate = delegate.beaconDelegate {
+                cell?.setup(delegate: beaconDelegate, model: delegate.model)
+            }
+            #endif
+            
+            return cell!
         }
         else {
             fatalError("Unexpected table section")

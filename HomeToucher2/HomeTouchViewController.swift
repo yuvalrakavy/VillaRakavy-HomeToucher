@@ -9,7 +9,6 @@
 import Foundation
 import UIKit
 import CoreLocation
-import CoreBluetooth
 import PromiseKit
 
 enum HomeTouchControllerError: Error {
@@ -30,17 +29,21 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     let deviceShaken = PromisedQueue<Bool>("device-shaken")
 
     let locationManager = CLLocationManager()
+    var locationAutherizationStatus: CLAuthorizationStatus
+
     var currentLocation: CLLocation?
     
     let cacheManager: CacheManager
     
+    #if BL_BEACON
     var beacon: Beacon?
+    var beaconDelegate: BeaconDelegate? { get { return self.beacon }}
+    #endif
     
     let showStateLabelAfter: TimeInterval = 2.0
     
     private var zoneSelectionController: HomeTouchZoneSelectionViewController?
     
-    var beaconDelegate: BeaconDelegate? { get { return self.beacon }}
     var geoSelectDelegate: GeoSelectDelegate? { get { return self }}
     
     required init?(coder: NSCoder) {
@@ -51,6 +54,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
             fatalError()
         }
         
+        self.locationAutherizationStatus = .notDetermined
         super.init(coder: coder)
     }
         
@@ -277,7 +281,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     }
 
     func getLocationAuthorizationStatus() -> Bool {
-        switch CLLocationManager.authorizationStatus() {
+        switch self.locationAutherizationStatus {
             case .denied, .restricted: return false
             default: return true
         }
@@ -288,7 +292,7 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     }
     
     func changeGeoSelectTo(state: Bool) {
-        if CLLocationManager.authorizationStatus() == .notDetermined {
+        if self.locationAutherizationStatus == .notDetermined {
             self.locationManager.requestWhenInUseAuthorization()
         }
 
@@ -307,7 +311,8 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
         performSegue(withIdentifier: "showZoneSelector", sender: self.frameBufferView)
     }
     
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        self.locationAutherizationStatus = manager.authorizationStatus
         self.zoneSelectionController?.redisplay()
     }
     
@@ -399,11 +404,13 @@ class HomeTouchViewController: UIViewController, HomeTouchZoneSelectionDelegate,
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        #if BL_BEACON
         self.beacon = Beacon(uuid: model.beaconUUID)
         
         if model.beaconState {
             self.beacon?.activate(info: model.beaconInfo)
         }
+        #endif
         
         self.locationManager.delegate = self
         self.locationManager.desiredAccuracy = 100              // 100m accuracy is good enough

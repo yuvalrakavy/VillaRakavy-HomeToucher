@@ -8,52 +8,71 @@
 
 import Foundation
 import UIKit
-import PromiseKit
 
 public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
     private typealias ServiceInfo = (service: NetService, more: Bool)
-    private var foundService: PromisedQueue<Bool>? = PromisedQueue("services")
+    private var foundService: PromisedQueue<Bool>? = nil
     
     private var theService: NetService?
     private let defaultManagerName: String?
+    private let serviceBrowser: NetServiceBrowser = NetServiceBrowser()
     
     init(defaultManagerName: String?) {
         self.defaultManagerName = defaultManagerName
         super.init()
     }
 
-    public func findManager(searchTimeout: TimeInterval = 4.0) -> Promise<NetService?> {
-        let serviceBrowser = NetServiceBrowser()
-    
-        serviceBrowser.delegate = self
+    public func findManager(searchTimeout: TimeInterval = 4.0) async -> NetService? {
+        NSLog("findManager: \(self.defaultManagerName.map(\.debugDescription) ?? "nil")")
+
+        self.serviceBrowser.delegate = self
+        self.foundService = PromisedQueue("services")
         
-        _ = after(seconds: searchTimeout).done {
-            self.foundService?.send(false)
-        }
-        
-        serviceBrowser.searchForServices(ofType: "_HtVncConf._udp", inDomain: "")
-        
-        return foundService!.wait().then {(_) -> Promise<NetService?> in
-            serviceBrowser.stop()
-            
-            if let service = self.theService {
-                return ServiceAddressResolver().resolveServiceAddress(service: service).then { aResolvedService in
-                    return Promise.value(aResolvedService)
+        // Set up timeout task to signal no result
+        Task { [] in
+            try? await Task.sleep(nanoseconds: UInt64(searchTimeout * 1_000_000_000))
+            await MainActor.run {
+                if self.foundService != nil {
+                    NSLog("Sending false to foundService")
                 }
+                self.foundService?.send(false)
             }
-            else {
-                return Promise.value(nil)          // Default service not found, or there is more than one
-            }
-        }.ensure {
-            serviceBrowser.delegate = nil
         }
+
+        self.serviceBrowser.searchForServices(ofType: "_HtVncConf._udp", inDomain: "")
+
+        // Wait for the first result from the promised queue
+        let searchResult: Bool = await { () async -> Bool in
+            do {
+                return try await self.foundService?.wait() ?? false
+            } catch {
+                NSLog("foundService wait failed with error: \(error)")
+                return false
+            }
+        }()
+
+        NSLog("searchResult: \(searchResult)")
+
+        self.foundService = nil
+        self.serviceBrowser.stop()
+
+        var result: NetService? = nil
+        if searchResult, let service = self.theService {
+            result = await ServiceAddressResolver().resolveServiceAddress(service: service)
+            NSLog("Found \(String(describing: result))")
+        }
+
+        self.serviceBrowser.delegate = nil
+        return result
     }
     
     public func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        NSLog("Found service: \(service.name)")
         if let foundService = self.foundService {
             var done = false
             
             if (self.defaultManagerName != nil && service.name == self.defaultManagerName) {
+                NSLog("Found the requried service")
                 self.theService = service
                 done = true             // That the one, stop
             }
@@ -68,8 +87,10 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
             }
             
             if done {
-                self.foundService = nil
+                NSLog("Sending true to foundService")
                 foundService.send(true)
+                foundService.finish()
+                self.foundService = nil
             }
         }
     }
@@ -78,23 +99,28 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
 public class ServiceAddressResolver: NSObject, NetServiceDelegate {
     var fulfill: ((NetService?) -> Void)? = nil
     
-    public func resolveServiceAddress(service: NetService, timeout: TimeInterval = 4) -> Promise<NetService?> {
-        service.delegate = self
-        service.resolve(withTimeout: timeout)
-        
-        return Promise() { seal in
-            self.fulfill = seal.fulfill
-        }.ensure {
-            service.delegate = nil
-            self.fulfill = nil
+    public func resolveServiceAddress(service: NetService, timeout: TimeInterval = 4) async -> NetService? {
+        return await withCheckedContinuation { (cont: CheckedContinuation<NetService?, Never>) in
+            Task { @MainActor in
+                self.fulfill = { resolved in
+                    cont.resume(returning: resolved)
+                }
+                service.delegate = self
+                service.resolve(withTimeout: timeout)
+            }
         }
     }
     
     public func netServiceDidResolveAddress(_ sender: NetService) {
+        sender.delegate = nil
         self.fulfill?(sender)
+        self.fulfill = nil
     }
     
     public func netService(_ sender: NetService, didNotResolve errorDict: [String : NSNumber]) {
+        sender.delegate = nil
         self.fulfill?(nil)
+        self.fulfill = nil
     }
 }
+

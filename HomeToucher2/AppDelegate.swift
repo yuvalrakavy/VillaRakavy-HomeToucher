@@ -24,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         IQKeyboardManager.shared.enable = true
         
         if let shortcut = launchOptions?[UIApplication.LaunchOptionsKey.shortcutItem] as? UIApplicationShortcutItem {
-            homeTouchController?.changeCurrentHometouchManager(name: shortcut.localizedTitle)
+            homeTouchController?.changeCurrentHomeTouchManager(name: shortcut.localizedTitle)
         }
         
         return true
@@ -62,14 +62,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_: UIApplication, open url: URL) -> Bool {
         if let host = url.host {
-            homeTouchController?.changeCurrentHometouchManager(name: host)
+            homeTouchController?.changeCurrentHomeTouchManager(name: host)
         }
         
         return true
     }
     
     func application(_: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
-        homeTouchController?.changeCurrentHometouchManager(name: shortcutItem.localizedTitle)
+        homeTouchController?.changeCurrentHomeTouchManager(name: shortcutItem.localizedTitle)
         completionHandler(true)
     }
 }

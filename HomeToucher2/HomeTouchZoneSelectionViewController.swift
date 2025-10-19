@@ -8,7 +8,6 @@
 
 import Foundation
 import UIKit
-import PromiseKit
 
 public protocol GeoSelectDelegate {
     func isGeoSelectEnabled() -> Bool
@@ -31,11 +30,24 @@ public protocol HomeTouchZoneSelectionDelegate {
     func selectedHomeTouchManager(name: String, dismiss: Bool)
     func removeHomeTouchManager(name: String)
     func homeTouchManagerSelectionCanceled()
+    func changeCurrentHomeTouchManager(name: String)
     
     func getHomeTouchManagerNames() -> [String]
     func getCurrentHomeTouchManagerName() -> String?
     func getGeoDescription(service: NetService) -> String?
     func getGeoDescription(name: String) -> String?
+}
+
+extension HomeTouchZoneSelectionDelegate {
+    // Provide default implementations so conforming types don't need to implement everything if unused.
+    public func selectedHomeTouchManager(service: NetService) {}
+    public func selectedHomeTouchManager(name: String, dismiss: Bool) {}
+    public func removeHomeTouchManager(name: String) {}
+    public func homeTouchManagerSelectionCanceled() {}
+    public func getHomeTouchManagerNames() -> [String] { return [] }
+    public func getCurrentHomeTouchManagerName() -> String? { return nil }
+    public func getGeoDescription(service: NetService) -> String? { return nil }
+    public func getGeoDescription(name: String) -> String? { return nil }
 }
 
 struct ListEntry {
@@ -67,25 +79,44 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     @IBOutlet weak var backButton: UIBarButtonItem!
     
     public func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
-        if !self.list.contains(where: {entry in entry.info.name == service.name }) {
+        if !self.list.contains(where: { entry in entry.info.name == service.name }) {
             newServices.append(service)
         }
-        
-        if(!moreComing) {
-            _ = when(fulfilled: self.newServices.map { service in
-                ServiceAddressResolver().resolveServiceAddress(service: service).done { mayBeResolvedService in
-                    if let resolvedService = mayBeResolvedService {
-                        self.list.append(ListEntry(info: (
-                            name: service.name,
-                            geoDescription: self.delegate?.getGeoDescription(service: resolvedService)),
-                            service: resolvedService)
-                        )
-                    }
+
+        if !moreComing {
+            let servicesToResolve = self.newServices
+            self.newServices.removeAll()
+
+            Task { @MainActor in
+                let resolved = await self.resolveServices(servicesToResolve)
+                for resolvedService in resolved {
+
+                    let name = resolvedService.name
+                    let entry = ListEntry(
+                        info: (
+                            name: name,
+                            geoDescription: self.delegate?.getGeoDescription(service: resolvedService)
+                        ),
+                        service: resolvedService
+                    )
+
+                    self.list.append(entry)
                 }
-            }).done {
-                self.homeTouchManagerServiceTable!.reloadData()
+                self.homeTouchManagerServiceTable?.reloadData()
             }
         }
+    }
+    
+    private func resolveServices(_ services: [NetService]) async -> [NetService] {
+        if services.isEmpty { return [] }
+        var results: [NetService] = []
+        // Resolve sequentially to avoid sending NetService (non-Sendable) across concurrency boundaries in Swift 6.
+        for svc in services {
+            if let resolved = await ServiceAddressResolver().resolveServiceAddress(service: svc) {
+                results.append(resolved)
+            }
+        }
+        return results
     }
     
     public func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
@@ -94,7 +125,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
         }
         
         if !moreComing {
-            homeTouchManagerServiceTable!.reloadData()
+            homeTouchManagerServiceTable?.reloadData()
         }
     }
     
@@ -243,6 +274,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     }
     
     public override func viewDidDisappear(_ animated: Bool) {
+        serviceBrowser?.stop()
         self.delegate = nil
         homeTouchManagerServiceTable?.dataSource = nil
         homeTouchManagerServiceTable?.delegate = nil
@@ -432,3 +464,4 @@ public class iBeaconCell : UITableViewCell {
         getViewController()?.present(alert, animated: true, completion: nil)
     }
 }
+

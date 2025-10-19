@@ -3,15 +3,11 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 52;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		7E00CFEF23EC51CB0071CE1D /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */; };
-		7E0A24042336CC84003F02DD /* PromiseKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; };
-		7E0A24052336CC84003F02DD /* PromiseKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7EECE6C0230F541300151773 /* PromiseKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		7E25BABC241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */; };
-		7E25BABD241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7E3FCE531DC9E7A000E14995 /* FrameBufferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE521DC9E7A000E14995 /* FrameBufferView.swift */; };
 		7E3FCE5A1DCA4BDC00E14995 /* PromisedLand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FCE591DCA4BDC00E14995 /* PromisedLand.swift */; };
 		7E5269941E054CEC0080143A /* PropertiesBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5269931E054CEC0080143A /* PropertiesBytes.swift */; };
@@ -34,22 +30,8 @@
 		7EE6B0931DC777A5001BB837 /* HomeTouchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B08F1DC777A5001BB837 /* HomeTouchModel.swift */; };
 		7EE6B0941DC777A5001BB837 /* HomeTouchViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B0901DC777A5001BB837 /* HomeTouchViewController.swift */; };
 		7EE6B0951DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE6B0911DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift */; };
+		7EF73A67253ED94B00F41CC6 /* IQKeyboardManagerSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7EF73A66253ED94B00F41CC6 /* IQKeyboardManagerSwift */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		7E0A24062336CC85003F02DD /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				7E25BABD241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Embed Frameworks */,
-				7E0A24052336CC84003F02DD /* PromiseKit.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		7E00CFEE23EC51CB0071CE1D /* CacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheManager.swift; sourceTree = "<group>"; };
@@ -81,6 +63,7 @@
 		7EE6B0901DC777A5001BB837 /* HomeTouchViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; lineEnding = 0; path = HomeTouchViewController.swift; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.swift; };
 		7EE6B0911DC777A5001BB837 /* HomeTouchZoneSelectionViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeTouchZoneSelectionViewController.swift; sourceTree = "<group>"; };
 		7EECE6C0230F541300151773 /* PromiseKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PromiseKit.framework; path = Carthage/Build/iOS/PromiseKit.framework; sourceTree = "<group>"; };
+		7EFDF08B2528E60B00F5F667 /* IQKeyboardManager.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IQKeyboardManager.framework; path = Carthage/Build/iOS/IQKeyboardManager.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,8 +71,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7E25BABC241D20C4002B7E0D /* IQKeyboardManagerSwift.framework in Frameworks */,
-				7E0A24042336CC84003F02DD /* PromiseKit.framework in Frameworks */,
+				7EF73A67253ED94B00F41CC6 /* IQKeyboardManagerSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +107,7 @@
 		7EC4BCC11E25674B00D0A4A6 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				7EFDF08B2528E60B00F5F667 /* IQKeyboardManager.framework */,
 				7E25BABB241D20C4002B7E0D /* IQKeyboardManagerSwift.framework */,
 				7EC4BCC21E25674B00D0A4A6 /* CoreBluetooth.framework */,
 			);
@@ -188,7 +171,6 @@
 				7EE6B0751DC77702001BB837 /* Sources */,
 				7EE6B0761DC77702001BB837 /* Frameworks */,
 				7EE6B0771DC77702001BB837 /* Resources */,
-				7E0A24062336CC85003F02DD /* Embed Frameworks */,
 				7ECF98B123F6B96000D6643F /* ShellScript */,
 			);
 			buildRules = (
@@ -196,6 +178,9 @@
 			dependencies = (
 			);
 			name = HomeToucher2;
+			packageProductDependencies = (
+				7EF73A66253ED94B00F41CC6 /* IQKeyboardManagerSwift */,
+			);
 			productName = HomeToucher2;
 			productReference = 7EE6B0791DC77702001BB837 /* HomeToucher2.app */;
 			productType = "com.apple.product-type.application";
@@ -206,8 +191,9 @@
 		7EE6B0711DC77702001BB837 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 0810;
-				LastUpgradeCheck = 0930;
+				LastUpgradeCheck = 2600;
 				ORGANIZATIONNAME = "Yuval Rakavy";
 				TargetAttributes = {
 					7EE6B0781DC77702001BB837 = {
@@ -219,7 +205,7 @@
 				};
 			};
 			buildConfigurationList = 7EE6B0741DC77702001BB837 /* Build configuration list for PBXProject "HomeToucher2" */;
-			compatibilityVersion = "Xcode 11.0";
+			compatibilityVersion = "Xcode 12.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -228,6 +214,9 @@
 				he,
 			);
 			mainGroup = 7EE6B0701DC77702001BB837;
+			packageReferences = (
+				7EF73A65253ED94B00F41CC6 /* XCRemoteSwiftPackageReference "IQKeyboardManager" */,
+			);
 			productRefGroup = 7EE6B07A1DC77702001BB837 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -378,6 +367,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -387,8 +377,10 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 8362JN58XW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -403,10 +395,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -438,6 +431,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -447,8 +441,10 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 8362JN58XW;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -457,9 +453,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -471,20 +468,24 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = 8362JN58XW;
+				CURRENT_PROJECT_VERSION = 3.5.01;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
 				);
 				INFOPLIST_FILE = HomeToucher2/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 9.3;
+				INFOPLIST_KEY_CFBundleDisplayName = HomeToucher;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.villarakavy.HomeTouch-Remote";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -492,20 +493,24 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = 8362JN58XW;
+				CURRENT_PROJECT_VERSION = 3.5.01;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Carthage/Build/iOS",
 				);
 				INFOPLIST_FILE = HomeToucher2/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 9.3;
+				INFOPLIST_KEY_CFBundleDisplayName = HomeToucher;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.villarakavy.HomeTouch-Remote";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -531,6 +536,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		7EF73A65253ED94B00F41CC6 /* XCRemoteSwiftPackageReference "IQKeyboardManager" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hackiftekhar/IQKeyboardManager";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.5.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7EF73A66253ED94B00F41CC6 /* IQKeyboardManagerSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7EF73A65253ED94B00F41CC6 /* XCRemoteSwiftPackageReference "IQKeyboardManager" */;
+			productName = IQKeyboardManagerSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7EE6B0711DC77702001BB837 /* Project object */;
 }

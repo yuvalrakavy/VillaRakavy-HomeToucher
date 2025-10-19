@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import PromiseKit
 
 enum NetworkChannelError : Error {
     case OpeningNonClosedChannel
@@ -88,29 +87,32 @@ public class NetworkChannel : NSObject, StreamDelegate {
         self.inputBufferIndex = 0
     }
     
-    func connect() -> Promise<NetworkChannel> {
+    func connect() async throws -> NetworkChannel {
         guard state == .closed else {
-            return Promise(error: NetworkChannelError.OpeningNonClosedChannel)
+            throw NetworkChannelError.OpeningNonClosedChannel
         }
-        
+
         Stream.getStreamsToHost(withName: server, port: port, inputStream: &inputStream, outputStream: &outputStream)
-        
-        if let input = inputStream, let output = outputStream {
-            input.delegate = self
-            output.delegate = self
-            
-            input.schedule(in: RunLoop.main, forMode: RunLoop.Mode.default)
-            output.schedule(in: RunLoop.main, forMode: RunLoop.Mode.default)
-            
-            input.open()
-            output.open()
-           
-            return Promise<NetworkChannel> { seal in
-                state = .opening(seal.fulfill, seal.reject)
-            }
+
+        guard let input = inputStream, let output = outputStream else {
+            throw NetworkChannelError.CannotCreateStream("\(server):\(port)")
         }
-        else {
-            return Promise(error: NetworkChannelError.CannotCreateStream("\(server):\(port)"))
+
+        input.delegate = self
+        output.delegate = self
+
+        input.schedule(in: RunLoop.main, forMode: RunLoop.Mode.default)
+        output.schedule(in: RunLoop.main, forMode: RunLoop.Mode.default)
+
+        input.open()
+        output.open()
+
+        return try await withCheckedThrowingContinuation { cont in
+            state = .opening({ channel in
+                cont.resume(returning: channel)
+            }, { error in
+                cont.resume(throwing: error)
+            })
         }
     }
     
@@ -134,13 +136,6 @@ public class NetworkChannel : NSObject, StreamDelegate {
     deinit {
         self.inputBufferPointer?.deallocate()
         disconnect()
-
-        self.gotInputBuffer.queue.forEach {
-            switch($0) {
-            case .Value(let bufferInfo): bufferInfo.buffer.deallocate()
-            case .Error(_): break
-            }
-        }
     }
     
     private func deinitStream(stream: Stream) {
@@ -149,154 +144,134 @@ public class NetworkChannel : NSObject, StreamDelegate {
         stream.delegate = nil
     }
   
-    public func getFromServer<T>(type: T.Type) -> Promise<T> {
-        return self.getFromServer(type: type, count: 1).map(on: nil) { (result: [T]) -> T in result[0] }
+    public func getFromServer<T>(type: T.Type) async throws -> T {
+        let result: [T] = try await self.getFromServer(type: type, count: 1)
+        return result[0]
     }
     
-    public func getFromServer(count: Int) -> Promise<Data> {
-        return getFromServer(type: UInt8.self, count: count).then(on: nil) { bytes in
-            return Promise.value(Data(bytes))
-        }
+    public func getFromServer(count: Int) async throws -> Data {
+        let bytes: [UInt8] = try await getFromServer(type: UInt8.self, count: count)
+        return Data(bytes)
     }
     
-    public func getFromServer<T>(type: T.Type, count: Int) -> Promise<[T]> {
+    public func getFromServer<T>(type: T.Type, count: Int) async throws -> [T] {
         guard state == .open else {
-            return Promise(error: state == .error ? NetworkChannelError.ReadError : NetworkChannelError.GetDataFromNonOpenChannel)
+            throw state == .error ? NetworkChannelError.ReadError : NetworkChannelError.GetDataFromNonOpenChannel
         }
-        
+
         @inline(__always) func mayDeallocateBuffer() {
-            // If all data has been consumed, deallocate the buffer
             if self.inputBufferIndex >= self.bytesInInputBuffer {
                 self.inputBufferPointer?.deallocate()
                 self.inputBufferPointer = nil
             }
         }
-        
-        // Get data from buffer (at this point it is ensured that at least one buffer has been received)
-        func doGetFromServer() -> Promise<[T]> {
+
+        func doGetFromServer() async throws -> [T] {
             let bytesToGet = MemoryLayout<T>.size * count
-            
-            if self.inputBufferIndex + bytesToGet <= self.bytesInInputBuffer {   // Enough bytes are in the buffer
+
+            if self.inputBufferIndex + bytesToGet <= self.bytesInInputBuffer {
                 let buffer = UnsafeMutableBufferPointer(start: self.inputBufferPointer!.advanced(by: self.inputBufferIndex).assumingMemoryBound(to: T.self), count: count)
-                
                 self.inputBufferIndex += bytesToGet
-                let result = Promise<[T]>.value(Array(buffer))
+                let array = Array(buffer)
                 mayDeallocateBuffer()
-                
-                return result
-            }
-            else {  // More bytes need to be read
+                return array
+            } else {
                 let resultPointer = UnsafeMutableRawPointer.allocate(byteCount: bytesToGet, alignment: 8)
                 let resultBytes = UnsafeMutableRawBufferPointer(start: resultPointer, count: bytesToGet)
                 let inputBuffer = UnsafeMutableRawBufferPointer(start: self.inputBufferPointer!, count: self.inputBufferSize)
                 var gotSoFar = 0
-                
-                while(self.inputBufferIndex < self.bytesInInputBuffer) {
+
+                while self.inputBufferIndex < self.bytesInInputBuffer {
                     resultBytes[gotSoFar] = inputBuffer[self.inputBufferIndex]
                     self.inputBufferIndex += 1
                     gotSoFar += 1
                 }
-                
+
                 mayDeallocateBuffer()
-                
-                return Promise { seal in
-                    PromisedLand.doWhile("doGetFromServer") {
-                        return Promise {seal in
-                            self.gotInputBuffer.wait().map(on: nil) { bufferInfo in
-                                self.inputBufferPointer = bufferInfo.buffer
-                                self.bytesInInputBuffer = bufferInfo.byteCount
-                                self.inputBufferIndex = 0
-                                
-                                let inputBuffer = UnsafeMutableRawBufferPointer(start: self.inputBufferPointer!, count: self.inputBufferSize)
-                                let bytesToProcess = min(bytesToGet - gotSoFar, self.bytesInInputBuffer)
 
-                                self.inputBufferIndex = 0
-                                
-                                for _ in 0 ..< bytesToProcess {
-                                    resultBytes[gotSoFar] = inputBuffer[self.inputBufferIndex]
-                                    gotSoFar += 1
-                                    self.inputBufferIndex += 1
-                                }
+                while gotSoFar < bytesToGet {
+                    let bufferInfo = try await self.gotInputBuffer.wait()
+                    self.inputBufferPointer = bufferInfo.buffer
+                    self.bytesInInputBuffer = bufferInfo.byteCount
+                    self.inputBufferIndex = 0
 
-                                mayDeallocateBuffer()
-                                seal.fulfill(gotSoFar < bytesToGet)         // Continue as long as not all needed bytes are in the result bytes buffer
-                            }.catch {
-                                seal.reject($0)
-                            }
-                        }
-                    }.map { _ in
-                        let buffer = UnsafeMutableBufferPointer(start: resultPointer.assumingMemoryBound(to: T.self), count: count)
-                        let theResult = Array(buffer)
-                        
-                        resultPointer.deallocate()
-                        
-                        seal.fulfill(theResult)
-                    }.catch {
-                        NSLog("Error \($0) while waiting for server input")
-                        seal.reject($0)
+                    let inputBuffer = UnsafeMutableRawBufferPointer(start: self.inputBufferPointer!, count: self.inputBufferSize)
+                    let bytesToProcess = min(bytesToGet - gotSoFar, self.bytesInInputBuffer)
+                    self.inputBufferIndex = 0
+
+                    for _ in 0 ..< bytesToProcess {
+                        resultBytes[gotSoFar] = inputBuffer[self.inputBufferIndex]
+                        gotSoFar += 1
+                        self.inputBufferIndex += 1
                     }
+
+                    mayDeallocateBuffer()
                 }
+
+                let buffer = UnsafeMutableBufferPointer(start: resultPointer.assumingMemoryBound(to: T.self), count: count)
+                let theResult = Array(buffer)
+                resultPointer.deallocate()
+                return theResult
             }
         }
-        
-        if count == 0 {
-            return Promise<[T]>.value([])
-        }
-        
+
+        if count == 0 { return [] }
+
         if self.inputBufferPointer == nil {
-            return self.gotInputBuffer.wait().then { (bufferInfo) -> Promise<[T]> in
-                self.inputBufferPointer = bufferInfo.buffer
-                self.bytesInInputBuffer = bufferInfo.byteCount
-                self.inputBufferIndex = 0
-                
-                return doGetFromServer()
-            }
-        }
-        else {
-            return doGetFromServer()
+            let bufferInfo = try await self.gotInputBuffer.wait()
+            self.inputBufferPointer = bufferInfo.buffer
+            self.bytesInInputBuffer = bufferInfo.byteCount
+            self.inputBufferIndex = 0
+            return try await doGetFromServer()
+        } else {
+            return try await doGetFromServer()
         }
     }
 
-    public func sendToServer<T>(dataItem: T) -> Promise<NetworkChannel> {
+    public func sendToServer<T>(dataItem: T) async throws -> NetworkChannel {
         guard state == .open else {
-            return Promise(error: state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
+            throw state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel
         }
-        
-        // Copy data to a buffer that will live until data is actually sent
+
         let dataBuffer = UnsafeMutablePointer<T>.allocate(capacity: 1)
         dataBuffer.initialize(to: dataItem)
-        
-        return Promise<OpaquePointer> { seal in
-            writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: seal.fulfill, reject: seal.reject))
+
+        defer { dataBuffer.deallocate() }
+
+        let _ = try await withCheckedThrowingContinuation { cont in
+            writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: { _ in
+                cont.resume(returning: self)
+            }, reject: { error in
+                cont.resume(throwing: error)
+            }))
             initiateNextWriteRequest()
-        }.map(on: nil) {
-            _ in self
-        }.ensure(on: nil) {
-            // Data was sent, dealloc temporary buffer
-            dataBuffer.deallocate()
         }
+
+        return self
     }
     
-    public func sendToServer<T : Collection>(dataItems: T) -> Promise<NetworkChannel> {
+    public func sendToServer<T: Collection>(dataItems: T) async throws -> NetworkChannel {
         guard state == .open else {
-            return Promise(error: state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
+            throw state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel
         }
 
         let count = dataItems.count
         let dataPointer = UnsafeMutablePointer<T.Iterator.Element>.allocate(capacity: count)
         let dataBuffer = UnsafeMutableBufferPointer(start: dataPointer, count: count)
+        _ = dataBuffer.initialize(from: dataItems)
 
-        let _ = dataBuffer.initialize(from: dataItems)
-        
-        return Promise<OpaquePointer> { seal in
-            writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: seal.fulfill, reject: seal.reject))
+        defer { dataPointer.deallocate() }
+
+        let _ = try await withCheckedThrowingContinuation { cont in
+            writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: { _ in
+                cont.resume(returning: self)
+            }, reject: { error in
+                cont.resume(throwing: error)
+            }))
             initiateNextWriteRequest()
-        }.map(on: nil) {
-            _ in self
-        }.ensure(on: nil) {
-            // Data was sent, dealloc temporary buffer
-            dataPointer.deallocate()
         }
+
+        return self
     }
     
  
@@ -308,7 +283,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
             writeNextChunk()
         }
     }
-    
+
     func writeNextChunk() {
         if let activeRequest = activeWriteRequest, let stream = outputStream, self.outputStream!.hasSpaceAvailable {
             let count = stream.write(activeRequest.buffer, maxLength: activeRequest.request.length - activeRequest.bytesDone)
@@ -317,8 +292,8 @@ public class NetworkChannel : NSObject, StreamDelegate {
             activeRequest.buffer = activeRequest.buffer.advanced(by: count)
             
             if activeRequest.bytesDone == activeRequest.request.length {
-                activeRequest.request.fulfill(OpaquePointer(activeRequest.buffer))
                 activeWriteRequest = nil
+                activeRequest.request.fulfill(OpaquePointer(activeRequest.buffer))
                 
                 initiateNextWriteRequest()
             }
@@ -340,7 +315,6 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 self.gotInputBuffer.error(NetworkChannelError.ReadError)
                 
                 if let activeRequest = activeWriteRequest {
-                    NSLog("rejecting activeRequest.request promise")
                     activeRequest.request.reject(NetworkChannelError.WriteError)
                 }
             }
@@ -385,3 +359,4 @@ public class NetworkChannel : NSObject, StreamDelegate {
         }
     }
 }
+

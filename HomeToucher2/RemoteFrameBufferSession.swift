@@ -8,7 +8,6 @@
 
 import Foundation
 import UIKit
-import PromiseKit
 
 public typealias PixelType = UInt32
 
@@ -20,16 +19,21 @@ public protocol FrameBitmapView {
     func getHitPoint(recognizer: UIGestureRecognizer) -> CGPoint?
 
     var frameBitmap: UnsafeMutableBufferPointer<PixelType> { get }
-    var deviceShaken: PromisedQueue<Bool>? { get set }
 }
 
+@MainActor
 public class RemoteFrameBufferSession {
     internal var model: HomeTouchModel
     internal var view: FrameBitmapView
     internal var frameBufferInfo: FrameBufferInfo?
 
-    private let press = PromisedQueue<(hitPoint: CGPoint, state: UIGestureRecognizer.State)>("press")
-    private let tap = PromisedQueue<CGPoint>("tap")
+    // 1) Add these stored properties
+    private var pressStream: AsyncStream<(hitPoint: CGPoint, state: UIGestureRecognizer.State)>!
+    private var pressContinuation: AsyncStream<(hitPoint: CGPoint, state: UIGestureRecognizer.State)>.Continuation!
+
+    private var tapStream: AsyncStream<CGPoint>!
+    private var tapContinuation: AsyncStream<CGPoint>.Continuation!
+
     private let cacheManager: CacheManager
     
     let debugLevel = 1
@@ -56,6 +60,13 @@ public class RemoteFrameBufferSession {
         self.activeSession = nil
         self.serverApiVersion = nil
         self.cacheManager = cacheManager
+        
+        self.pressStream = AsyncStream { continuation in
+            self.pressContinuation = continuation
+        }
+        self.tapStream = AsyncStream { continuation in
+            self.tapContinuation = continuation
+        }
     }
     
     func debug(_ message: String, minDebugLevel: Int = 1) {
@@ -64,46 +75,65 @@ public class RemoteFrameBufferSession {
         }
     }
     
-    public func begin(server: String, port: Int, onSessionStarted: (() -> Void)? = nil) -> Promise<Bool> {
-        
+    public func begin(server: String, port: Int, onSessionStarted: (() -> Void)? = nil) async throws {
         debug("Starting RFB session")
         initializationStopwatch.start()
-        
-        func runSession(_ networkChannel: NetworkChannel) -> Promise<Bool> {
-            let pingTimer = Timer.scheduledTimer(withTimeInterval: serverPingInterval, repeats: true) {_ in
-                self.debug("Ping: Sending to server")
-                _ = networkChannel.sendToServer(dataItems: self.formatSetCutText(text: ""))
+
+        func runSession(_ networkChannel: NetworkChannel) async throws {
+            let pingTask = Task.detached { [weak self] in
+                guard let self else { return }
+                while !Task.isCancelled {
+                    await MainActor.run { self.debug("Ping: Sending to server") }
+                    if let channel = await MainActor.run (body: { self.activeSession?.networkChannel }) {
+                        let data = await MainActor.run { self.formatSetCutText(text: "") }
+                        _ = try? await channel.sendToServer(dataItems: data)
+                    }
+                    try? await Task.sleep(nanoseconds: UInt64(self.serverPingInterval * 1_000_000_000))
+                }
             }
-            let (cancellationPromise, cancel) = PromisedLand.getCancellationPromise()
-            
-            pingTimer.tolerance = 0.5
-            
+
             onSessionStarted?()
-            
-            let sessionPromise : Promise<Bool> = when(resolved:
-                [
-                    self.handleGestures(networkChannel: networkChannel, cancellationPromise: cancellationPromise),
-                    self.handleServerInput(networkChannel: networkChannel, cancellationPromise: cancellationPromise)
-                ]
-            ).map { _ in
-                return true
-            }.ensure() {
+
+            defer {
                 networkChannel.disconnect()
                 self.view.freeFrameFrameBitmap()
-                
                 NSLog("Invalidating ping timer")
-                pingTimer.invalidate()
+                pingTask.cancel()
             }
-            
-            self.activeSession = SessionInfo(networkChannel: networkChannel, sessionPromise: sessionPromise, cancel: cancel)
-            return sessionPromise
+
+            self.activeSession = SessionInfo(networkChannel: networkChannel, task: nil, cancel: {})
+
+            let sessionTask = Task { [weak self] in
+                guard let self else { return }
+                // Start server input handling as a child task and keep a strong reference locally.
+                let serverInputTask = Task { [weak self] () -> Bool in
+                    guard let self else { return false }
+                    do {
+                        return try await self.handleServerInput(networkChannel: networkChannel)
+                    } catch {
+                        await MainActor.run { self.debug("handleServerInput error: \(error)") }
+                        return false
+                    }
+                }
+
+                await withTaskCancellationHandler {
+                    async let gestures: Bool = self.handleGestures(networkChannel: networkChannel)
+                    let serverInput = await serverInputTask.value
+                    _ = await (gestures, serverInput)
+                } onCancel: {
+                    // Explicitly cancel the unstructured child so it can unblock promptly
+                    NSLog("session task was canceled")
+                    serverInputTask.cancel()
+                }
+            }
+            self.activeSession?.task = sessionTask
+            self.activeSession?.cancel = { NSLog("Canceling session task"); sessionTask.cancel() }
+
+            await sessionTask.value
         }
-        
-        return firstly {
-            self.initSession(server: server, port: port)
-        }.then(on: nil) { networkChannel in
-            return runSession(networkChannel)
-        }
+
+        let networkChannel = try await self.initSession(server: server, port: port)
+        try await runSession(networkChannel)
     }
     
     public func terminate() {
@@ -127,318 +157,250 @@ public class RemoteFrameBufferSession {
     public func invokeApi(parameters: [String: String]) {
         if let _ = self.serverApiVersion {
             debug("Sending InvokeAPI parameters: \(parameters)", minDebugLevel: 2)
-            _ = self.activeSession?.networkChannel.sendToServer(dataItems: self.formatInvokeApiCommand(parameters: parameters))
+            Task { [weak self] in
+                guard let self else { return }
+                let data = self.formatInvokeApiCommand(parameters: parameters)
+                _ = try? await self.activeSession?.networkChannel.sendToServer(dataItems: data)
+            }
         }
     }
     
     public var serverApiVersion: Int?
     
-    private func initSession(server: String, port: Int) -> Promise<NetworkChannel> {
+    private func initSession(server: String, port: Int) async throws -> NetworkChannel {
         let networkChannel = NetworkChannel(server: server, port: port)
-        
-        func sendUpdateRequestCommand() -> Promise<NetworkChannel> {
-            debug("Sending frameUpdateRequest command", minDebugLevel: 2)
-            return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: false))
+
+        func sendUpdateRequestCommand() async throws -> NetworkChannel {
+            self.debug("Sending frameUpdateRequest command", minDebugLevel: 2)
+            return try await networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: false))
         }
+
+        func getSessionName(_ frameBufferInfo: FrameBufferInfo) async throws -> String {
+            let sessionNameBytes: [UInt8] = try await networkChannel.getFromServer(type: UInt8.self, count: Int(frameBufferInfo.nameLength))
+            return String(bytes: sessionNameBytes, encoding: String.Encoding.windowsCP1253) ?? "Cannot decode name"
+        }
+
+        _ = try await networkChannel.connect()
+        _ = try await self.doVersionHandshake(networkChannel)
+        _ = try await self.doSecurityHandshake(networkChannel)
+
+        let unfixedframeBufferInfo: FrameBufferInfo = try await networkChannel.getFromServer(type: FrameBufferInfo.self)
+        var frameBufferInfo = unfixedframeBufferInfo
+        frameBufferInfo.height = frameBufferInfo.height.bigEndian
+        frameBufferInfo.width = frameBufferInfo.width.bigEndian
+        frameBufferInfo.nameLength = frameBufferInfo.nameLength.bigEndian
+        frameBufferInfo.pixelFormat.redMax = frameBufferInfo.pixelFormat.redMax.bigEndian
+        frameBufferInfo.pixelFormat.greenMax = frameBufferInfo.pixelFormat.greenMax.bigEndian
+        frameBufferInfo.pixelFormat.blueMax = frameBufferInfo.pixelFormat.blueMax.bigEndian
         
-        func getSessionName(_ frameBufferInfo: FrameBufferInfo) -> Promise<String> {
-            return networkChannel.getFromServer(type: UInt8.self, count: Int(frameBufferInfo.nameLength)).map(on: nil) { (sessionNameBytes: [UInt8]) in
-                return String(bytes: sessionNameBytes, encoding: String.Encoding.windowsCP1253) ?? "Cannot decode name"
+        self.frameBufferInfo = frameBufferInfo
+        self.view.allocateFrameBitmap(size: frameBufferInfo.size)
+
+        let sessionName: String = try await getSessionName(frameBufferInfo)
+        self.debug("RFB session name \(sessionName)")
+
+        let encodingList = self.model.DisableCaching ? [5, 0, self.apiEncoding] : [5, 0, self.apiEncoding, self.clientSideCachingEncoding]
+        _ = try await networkChannel.sendToServer(dataItems: self.formatSetEncodingCommand(supportedEncoding: encodingList))
+        let ch: NetworkChannel = try await sendUpdateRequestCommand()
+        return ch
+    }
+    
+    private func doVersionHandshake(_ networkChannel: NetworkChannel) async throws -> NetworkChannel {
+        let serverVersionBytes: [UInt8] = try await networkChannel.getFromServer(type: UInt8.self, count: 12)
+        let version = [UInt8]("RFB 003.008\n".utf8)
+        let serverVersion = String(bytes: serverVersionBytes, encoding: String.Encoding.utf8)!
+        self.debug("Sever RFB version \(serverVersion)")
+        _ = try await networkChannel.sendToServer(dataItems: version)
+        return networkChannel
+    }
+    
+    private func doSecurityHandshake(_ networkChannel: NetworkChannel) async throws -> NetworkChannel {
+        func handleSecurityResult(_ securityResult: UInt32) async throws -> NetworkChannel {
+            if securityResult.bigEndian == 0 {
+                _ = try await networkChannel.sendToServer(dataItem: UInt8(1))
+                return networkChannel
+            } else {
+                let errorMessage = try await self.getErrorMessage(networkChannel: networkChannel)
+                throw SessionError.SecurityFailed(errorMessage: errorMessage)
             }
         }
-        
-        return networkChannel.connect().then(on: nil) { (_: NetworkChannel) -> Promise<NetworkChannel>  in
-            self.doVersionHandshake(networkChannel)
-        }.then(on: nil) { (_ : NetworkChannel) -> Promise<NetworkChannel>  in
-            self.doSecurityHandshake(networkChannel)
-        }.then(on: nil) { (_ : NetworkChannel) -> Promise<FrameBufferInfo> in
-            networkChannel.getFromServer(type: FrameBufferInfo.self)
-        }.then(on: nil) { (unfixedframeBufferInfo: FrameBufferInfo) -> Promise<String> in
-            var frameBufferInfo: FrameBufferInfo = unfixedframeBufferInfo
-            
-            // Convert fields from network order to host order
-            frameBufferInfo.height = frameBufferInfo.height.bigEndian
-            frameBufferInfo.width = frameBufferInfo.width.bigEndian
-            frameBufferInfo.nameLength = frameBufferInfo.nameLength.bigEndian
-            frameBufferInfo.pixelFormat.redMax = frameBufferInfo.pixelFormat.redMax.bigEndian
-            frameBufferInfo.pixelFormat.greenMax = frameBufferInfo.pixelFormat.greenMax.bigEndian
-            frameBufferInfo.pixelFormat.blueMax = frameBufferInfo.pixelFormat.blueMax.bigEndian
-            
-            self.frameBufferInfo = frameBufferInfo
-            self.view.allocateFrameBitmap(size: frameBufferInfo.size)
-            
-            return getSessionName(frameBufferInfo)
-        }.then(on: nil) { (sessionName: String) -> Promise<NetworkChannel> in
-            self.debug("RFB session name \(sessionName)")
-            
-            let encodingList = self.model.DisableCaching ?
-                [
-                    5,
-                    0,
-                    self.apiEncoding,
-                ] :
-                [
-                    5,
-                    0,
-                    self.apiEncoding,
-                    self.clientSideCachingEncoding
-                ]
 
-
-            return networkChannel.sendToServer(dataItems: self.formatSetEncodingCommand(supportedEncoding: encodingList))
-        }.then(on: nil) { (_ : NetworkChannel) -> Promise<NetworkChannel> in
-            sendUpdateRequestCommand()
-        }.recover { err in
-            Promise.init(error: err)
-        }
+        let _ = try await self.doGetAuthenticationMethods(networkChannel)
+        _ = try await networkChannel.sendToServer(dataItem: UInt8(1))
+        let securityResult: UInt32 = try await networkChannel.getFromServer(type: UInt32.self)
+        return try await handleSecurityResult(securityResult)
     }
     
-    private func doVersionHandshake(_ networkChannel: NetworkChannel) -> Promise<NetworkChannel> {
-        return networkChannel.getFromServer(type: UInt8.self, count: 12).then(on: nil) { (serverVersionBytes: [UInt8]) -> Promise<NetworkChannel> in
-            let version = [UInt8]("RFB 003.008\n".utf8)
-            let serverVersion = String(bytes: serverVersionBytes, encoding: String.Encoding.utf8)!
-            
-            self.debug("Sever RFB version \(serverVersion)")
-            
-            return networkChannel.sendToServer(dataItems: version)
-        }
-    }
-    
-    private func doSecurityHandshake(_ networkChannel: NetworkChannel) -> Promise<NetworkChannel> {
-        func handleSecurityResult(_ securityResult: UInt32) -> Promise<NetworkChannel> {
-            return securityResult.bigEndian == 0 ?
-                networkChannel.sendToServer(dataItem: UInt8(1)) :  // Send ClientInit (share flag is true)
-                self.getErrorMessage(networkChannel: networkChannel).map(on: nil) {
-                    errorMessage in
-                        throw SessionError.SecurityFailed(errorMessage: errorMessage)
-                }
-        }
-        
-        return self.doGetAuthenticationMethods(networkChannel).then(on: nil) { (securityBytes: [UInt8]) -> Promise<NetworkChannel> in
-            return networkChannel.sendToServer(dataItem: UInt8(1))      // No authentication
-        }.then(on: nil) {_ in
-            networkChannel.getFromServer(type: UInt32.self)
-        }.then(on: nil) { (securityResult : UInt32) -> Promise<NetworkChannel> in
-            handleSecurityResult(securityResult)
-        }.recover { err in
-            Promise.init(error: err)
-        }
-    }
-    
-    private func doGetAuthenticationMethods(_ networkChannel: NetworkChannel) -> Promise<[UInt8]> {
-        func handleAuthenticationMethod(_ methodCount: UInt8) -> Promise<[UInt8]> {
+    private func doGetAuthenticationMethods(_ networkChannel: NetworkChannel) async throws -> [UInt8] {
+        func handleAuthenticationMethod(_ methodCount: UInt8) async throws -> [UInt8] {
             if methodCount > 0 {
-                return networkChannel.getFromServer(type: UInt8.self, count: Int(methodCount))
-            }
-            else {
-                return self.getErrorMessage(networkChannel: networkChannel).then(on: nil) { (errorMessage: String) -> Promise<[UInt8]> in
-                    throw SessionError.InvalidConnection(errorMessage: errorMessage)
-                }
+                return try await networkChannel.getFromServer(type: UInt8.self, count: Int(methodCount))
+            } else {
+                let errorMessage = try await self.getErrorMessage(networkChannel: networkChannel)
+                throw SessionError.InvalidConnection(errorMessage: errorMessage)
             }
         }
-        
-        return firstly {
-            networkChannel.getFromServer(type: UInt8.self)
-        }.then(on: nil) { (methodCount: UInt8) -> Promise<[UInt8]> in
-            return handleAuthenticationMethod(methodCount)
-        }
+
+        let methodCount: UInt8 = try await networkChannel.getFromServer(type: UInt8.self)
+        return try await handleAuthenticationMethod(methodCount)
     }
     
-    private func getErrorMessage(networkChannel: NetworkChannel) -> Promise<String> {
-        return networkChannel.getFromServer(type: UInt32.self).then(on: nil) {
-            networkChannel.getFromServer(type: UInt8.self, count: Int($0.bigEndian))
-        }.map {
-            return String(bytes: $0, encoding: String.Encoding.utf8)!
-        }
+    private func getErrorMessage(networkChannel: NetworkChannel) async throws -> String {
+        let count: UInt32 = try await networkChannel.getFromServer(type: UInt32.self)
+        let bytes: [UInt8] = try await networkChannel.getFromServer(type: UInt8.self, count: Int(count.bigEndian))
+        return String(bytes: bytes, encoding: String.Encoding.utf8)!
     }
     
-    private func handleServerInput(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
+    private func handleServerInput(networkChannel: NetworkChannel) async throws -> Bool {
         initializationStopwatch.report()
-        return PromisedLand.doWhile("handleServerInput", cancellationPromise: cancellationPromise) { return self.handleServerReply(networkChannel: networkChannel) }
+        while !Task.isCancelled {
+            let shouldContinue = try await self.handleServerReply(networkChannel: networkChannel)
+            if !shouldContinue { return false }
+        }
+        return false
     }
     
-    private func handleServerReply(networkChannel: NetworkChannel) -> Promise<Bool> {
-        func processReply(_ reply: UInt8) -> Promise<Bool> {
+    private func handleServerReply(networkChannel: NetworkChannel) async throws -> Bool {
+        func processReply(_ reply: UInt8) async throws -> Bool {
             switch reply {
-                
-            case 0:    // FrameBuffer update
-                debug("Got frameBufferUpdate message from server", minDebugLevel: 2)
-                return self.processFrameBufferUpdate(networkChannel: networkChannel).then(on: nil) {(_: Bool) -> Promise<NetworkChannel> in
-                    // After done with updating, ask the server to send the next frame buffer update
-                    self.debug("Send FrameUpdateRequestCommand (incremental: true)", minDebugLevel: 2)
-                    return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
-                }.map(on: nil) { (_: NetworkChannel) -> Bool in
-                     true
-                }
-                
+            case 0:
+                self.debug("Got frameBufferUpdate message from server", minDebugLevel: 2)
+                let _ = try await self.processFrameBufferUpdate(networkChannel: networkChannel)
+                self.debug("Send FrameUpdateRequestCommand (incremental: true)", minDebugLevel: 2)
+                _ = try await networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
+                return true
             case self.frameUpdateExtensionMessage:
-                debug("Got frameBufferUpdateExtension message from server", minDebugLevel: 2)
-                return self.processFrameUpdateExtension(networkChannel: networkChannel).then(on: nil) { (getFrameDataFromServer: Bool) -> Promise<NetworkChannel> in
-                    if getFrameDataFromServer {
-                        self.debug("Send SendFrameDataCommand)", minDebugLevel: 2)
-                        return networkChannel.sendToServer(dataItems: self.formatSendFrameDataCommand())
-                    }
-                    else {
-                        self.debug("Send FrameUpdateRequestCommand (incremental: true)", minDebugLevel: 2)
-                        return networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
-                    }
-                }.map(on: nil) { (_: NetworkChannel) in
-                    true
+                self.debug("Got frameBufferUpdateExtension message from server", minDebugLevel: 2)
+                let getFrameDataFromServer = try await self.processFrameUpdateExtension(networkChannel: networkChannel)
+                if getFrameDataFromServer {
+                    self.debug("Send SendFrameDataCommand)", minDebugLevel: 2)
+                    _ = try await networkChannel.sendToServer(dataItems: self.formatSendFrameDataCommand())
+                } else {
+                    self.debug("Send FrameUpdateRequestCommand (incremental: true)", minDebugLevel: 2)
+                    _ = try await networkChannel.sendToServer(dataItems: self.formatFrameBufferUpdateRequstCommand(incremental: true))
                 }
-            
+                return true
             case self.invokeApiMessage:
-                debug("Got invoke API from server", minDebugLevel: 2)
-                return self.processApiCall(networkChannel: networkChannel)
-                
+                self.debug("Got invoke API from server", minDebugLevel: 2)
+                let _ = try await self.processApiCall(networkChannel: networkChannel)
+                return true
             default:
-                return Promise<Bool>.value(false)
+                return false
             }
         }
-        
-        return networkChannel.getFromServer(type: UInt8.self).then(on: nil) { (reply: UInt8) -> Promise<Bool> in
-            return processReply(reply)
-        }.recover { err in
-            self.debug("handleServerReply - error -- calling self.terminate: \(err)")
+
+        do {
+            let reply: UInt8 = try await networkChannel.getFromServer(type: UInt8.self)
+            return try await processReply(reply)
+        } catch {
+            self.debug("handleServerReply - error -- calling self.terminate: \(error)")
             self.terminate()
-            return Guarantee.value(false)
-        }.then { r in return Promise.value(r) }
+            return false
+        }
     }
 
-    private func processFrameUpdateExtension(networkChannel: NetworkChannel) -> Promise<Bool> {
-        return networkChannel.getFromServer(type: UInt8.self).then { (hasData: UInt8) -> Promise<Bool> in
-            return networkChannel.getFromServer(type: UInt32.self, count: 2).then { (rawHeader: [UInt32]) -> Promise<(key: CacheKey, frameData: Data)?> in
-                let cacheKey = CacheKey(length: rawHeader[0].bigEndian, hashCode: rawHeader[1].bigEndian)
-                
-                if hasData != 0 {
-                    return networkChannel.getFromServer(count: Int(cacheKey.length)).then { (frameData: Data) -> Promise<(key: CacheKey, frameData: Data)?> in
-                        self.cacheManager.add(key: cacheKey, frameData: frameData)
-                        return Promise.value((key: cacheKey, frameData: frameData))
-                    }
-                }
-                else {
-                    let getDataFromCacheStopwatch = StopWatch("Get data from cache")
-                    getDataFromCacheStopwatch.start()
+    private func processFrameUpdateExtension(networkChannel: NetworkChannel) async throws -> Bool {
+        let hasData: UInt8 = try await networkChannel.getFromServer(type: UInt8.self)
+        let rawHeader: [UInt32] = try await networkChannel.getFromServer(type: UInt32.self, count: 2)
+        let cacheKey = CacheKey(length: rawHeader[0].bigEndian, hashCode: rawHeader[1].bigEndian)
 
-                    if let frameData = self.cacheManager.get(key: cacheKey) {
-                        getDataFromCacheStopwatch.report()
-                        return Promise.value((key: cacheKey, frameData: frameData))
-                    }
-                    else {
-                        getDataFromCacheStopwatch.stop()
-                        return Promise.value(nil)
-                    }
-                }
-            }.then { (keyAndFrameData: (key: CacheKey, frameData: Data)?) -> Promise<Bool> in
-                if let k = keyAndFrameData {        // Got frame data either from cache or from the server
-                    let applyFrameBufferUpdateStopwatch = StopWatch("ApplyFrameData")
-                    
-                    applyFrameBufferUpdateStopwatch.start()
-                    self.applyFrameBufferUpdate(frameData: k.frameData)
-                    applyFrameBufferUpdateStopwatch.report()
-                    return Promise.value(false)     // No need for frame data
-                }
-                else {
-                    return Promise.value(true)      // Need to get frame data
-                }
+        var keyAndFrameData: (key: CacheKey, frameData: Data)? = nil
+        if hasData != 0 {
+            let frameData: Data = try await networkChannel.getFromServer(count: Int(cacheKey.length))
+            self.cacheManager.add(key: cacheKey, frameData: frameData)
+            keyAndFrameData = (key: cacheKey, frameData: frameData)
+        } else {
+            let getDataFromCacheStopwatch = StopWatch("Get data from cache")
+            getDataFromCacheStopwatch.start()
+            if let frameData = self.cacheManager.get(key: cacheKey) {
+                getDataFromCacheStopwatch.report()
+                keyAndFrameData = (key: cacheKey, frameData: frameData)
+            } else {
+                getDataFromCacheStopwatch.stop()
             }
+        }
+
+        if let k = keyAndFrameData {
+            let applyFrameBufferUpdateStopwatch = StopWatch("ApplyFrameData")
+            applyFrameBufferUpdateStopwatch.start()
+            self.applyFrameBufferUpdate(frameData: k.frameData)
+            applyFrameBufferUpdateStopwatch.report()
+            return false
+        } else {
+            return true
         }
     }
     
-    private func receiveString(networkChannel: NetworkChannel) -> Promise<String?> {
-        return networkChannel.getFromServer(type: UInt16.self).then { (count : UInt16) -> Promise<String?> in
-            if count == 0 {
-                return Promise.value(nil)
-            }
-            else {
-                return networkChannel.getFromServer(type: UInt8.self, count: Int(count.bigEndian) * 2).then {
-                    Promise.value(String(bytes: $0, encoding: String.Encoding.utf16BigEndian))
-                }
-            }
-        }
+    private func receiveString(networkChannel: NetworkChannel) async throws -> String? {
+        let count: UInt16 = try await networkChannel.getFromServer(type: UInt16.self)
+        if count == 0 { return nil }
+        let bytes: [UInt8] = try await networkChannel.getFromServer(type: UInt8.self, count: Int(count.bigEndian) * 2)
+        return String(bytes: bytes, encoding: String.Encoding.utf16BigEndian)
     }
     
     typealias OptionalNameValuePair = (name: String, value: String)?
     
-    private func receiveNameValue(networkChannel: NetworkChannel) -> Promise<OptionalNameValuePair> {
-        return self.receiveString(networkChannel: networkChannel).then { (mayBeName : String?) -> Promise<OptionalNameValuePair> in
-            if let name = mayBeName {
-                return self.receiveString(networkChannel: networkChannel).then { (mayBeValue: String?) -> Promise<OptionalNameValuePair> in
-                    if let value = mayBeValue {
-                        return Promise.value((name: name, value: value))
-                    }
-                    else {
-                        return Promise.value(nil)
-                    }
-                }
-            }
-            else {
-                return Promise.value(nil)
+    private func receiveNameValue(networkChannel: NetworkChannel) async throws -> OptionalNameValuePair {
+        let mayBeName = try await self.receiveString(networkChannel: networkChannel)
+        if let name = mayBeName {
+            let mayBeValue = try await self.receiveString(networkChannel: networkChannel)
+            if let value = mayBeValue {
+                return (name: name, value: value)
             }
         }
+        return nil
     }
     
-    private func processApiCall(networkChannel: NetworkChannel) -> Promise<Bool> {
+    private func processApiCall(networkChannel: NetworkChannel) async throws -> Bool {
         var dict = [String:String]()
-        
-        return networkChannel.getFromServer(type: UInt8.self).then(on: nil) { _ -> Promise<Bool> in
-            Promise.value(true)
-        }.then (on: nil) { _ -> Promise<Bool> in
-            return PromisedLand.doWhile("processApiCall") {
-                return self.receiveNameValue(networkChannel: networkChannel).map { maybeNameValuePair in
-                    if let nameValuePair = maybeNameValuePair {
-                        dict[nameValuePair.name] = nameValuePair.value
-                        return true
-                    }
-                    else {
-                        return false
-                    }
-                }
-            }
-        }.then { (_) -> Promise<Bool> in
-            self.onApiCall?(dict)
-            self.debug("ProcessApiCall returning Promise.value(true)")
-            return Promise.value(true)
-        }
-    }
-    
-    private func handlePressGesture(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
-        return PromisedLand.doWhile("handlePressGebture", cancellationPromise: cancellationPromise) { () in
-            return self.press.wait().map(on: nil) { pressInfo in
-                switch(pressInfo.state) {
-                    
-                case .began:
-                    _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: pressInfo.hitPoint, buttonDown: true))
-                    
-                case .cancelled, .ended:
-                    _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: pressInfo.hitPoint, buttonDown: false))
-                
-                default: break
-                    
-                }
-                return true
+        _ = try await networkChannel.getFromServer(type: UInt8.self)
+        while true {
+            let maybeNameValuePair = try await self.receiveNameValue(networkChannel: networkChannel)
+            if let nameValuePair = maybeNameValuePair {
+                dict[nameValuePair.name] = nameValuePair.value
+            } else {
+                break
             }
         }
+        self.onApiCall?(dict)
+        self.debug("ProcessApiCall returning true")
+        return true
     }
     
-    private func handleTapGesture(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
-        return PromisedLand.doWhile("handleTapGesture", cancellationPromise: cancellationPromise) { () in
-            return self.tap.wait().map(on: nil) { hitPoint in
-                self.debug("Send PointerEvent at \(hitPoint)", minDebugLevel: 2)
-                _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: true))
-                _ = networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: false))
-                
-                return true
+    private func handlePressGesture(networkChannel: NetworkChannel) async -> Bool {
+        self.debug("Handling press gesture")
+        for await pressInfo in pressStream {
+            self.debug("Press: \(pressInfo)")
+            if Task.isCancelled { return false }
+            switch pressInfo.state {
+            case .began:
+                _ = try? await networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: pressInfo.hitPoint, buttonDown: true))
+            case .cancelled, .ended:
+                _ = try? await networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: pressInfo.hitPoint, buttonDown: false))
+            default:
+                break
             }
         }
+        return true
     }
     
-    private func handleGestures(networkChannel: NetworkChannel, cancellationPromise: Promise<Bool>) -> Promise<Bool> {
-        return when(fulfilled:
-            [
-                handlePressGesture(networkChannel: networkChannel, cancellationPromise: cancellationPromise),
-                handleTapGesture(networkChannel: networkChannel, cancellationPromise: cancellationPromise)
-            ]
-        ).map(on: nil) { _ in true }
+    private func handleTapGesture(networkChannel: NetworkChannel) async -> Bool {
+        self.debug("Handling tap gesture")
+        for await hitPoint in tapStream {
+            self.debug("Tap: \(hitPoint)")
+            if Task.isCancelled { return false }
+            self.debug("Send PointerEvent at \(hitPoint)", minDebugLevel: 2)
+            _ = try? await networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: true))
+            _ = try? await networkChannel.sendToServer(dataItems: self.formatPointerEvent(hitPoint: hitPoint, buttonDown: false))
+        }
+        return true
+    }
+    
+    private func handleGestures(networkChannel: NetworkChannel) async -> Bool {
+        async let pressResult: Bool = handlePressGesture(networkChannel: networkChannel)
+        async let tapResult: Bool = handleTapGesture(networkChannel: networkChannel)
+        _ = await (pressResult, tapResult)
+        return true
     }
     
     // Get byte array represntng a given value
@@ -509,20 +471,20 @@ public class RemoteFrameBufferSession {
     
     @objc private func resolveOnLongPress(_ recognizer: UILongPressGestureRecognizer) {
         if let hitPoint = self.view.getHitPoint(recognizer: recognizer) {
-            self.press.send((hitPoint, recognizer.state))
+            self.pressContinuation.yield((hitPoint, recognizer.state))
         }
     }
     
     @objc private func resolveOnTap(_ recognizer: UITapGestureRecognizer) {
         if let hitPoint = view.getHitPoint(recognizer: recognizer) {
-            self.tap.send(hitPoint)
+            self.tapContinuation.yield(hitPoint)
         }
     }
     
-    private func processFrameBufferUpdate(networkChannel: NetworkChannel) -> Promise<Bool> {
+    private func processFrameBufferUpdate(networkChannel: NetworkChannel) async throws -> Bool {
         let updater = StreamBufferUpdater(session: self, networkChannel: networkChannel)
-        
-        return updater.apply()
+        let result: Bool = try await updater.apply()
+        return result
     }
 
     private func applyFrameBufferUpdate(frameData: Data) {
@@ -544,7 +506,7 @@ public enum FrameBufferViewError : Error {
 
 private struct SessionInfo {
     var networkChannel: NetworkChannel
-    var sessionPromise: Promise<Bool>
+    var task: Task<Void, Never>?
     var cancel: () -> Void
 }
 

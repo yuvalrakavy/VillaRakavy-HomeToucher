@@ -8,7 +8,6 @@
 
 import Foundation
 import UIKit
-import PromiseKit
 
 public typealias HostAddress = (hostname: String, port: Int)
 
@@ -26,43 +25,53 @@ public class HomeTouchManager {
         self.resolveRecievedData = nil
     }
     
-    public func getServer(timeout: TimeInterval = 2.0, retryCount: Int = 3) -> Promise<HostAddress?> {
+    public func getServer(timeout: TimeInterval = 2.0, retryCount: Int = 3) async -> HostAddress? {
         var result: HostAddress? = nil
         let me = Unmanaged.passUnretained(self).toOpaque().assumingMemoryBound(to: HomeTouchManager.self)
         var context = CFSocketContext(version: 0, info: me, retain: nil, release: nil, copyDescription: nil)
         let socket = withUnsafePointer(to: &context) { CFSocketCreate(nil, PF_INET, SOCK_DGRAM, IPPROTO_UDP, CFSocketCallBackType.dataCallBack.rawValue, onSocketEvent, $0) }
         let runLoopSource = CFSocketCreateRunLoopSource(nil, socket, 100)
-        
+
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode)
-        
-        return firstly {
-            PromisedLand.loop(retryCount) { _ in
-                if CFSocketSendData(socket, self.serverAddress as CFData?, self.createQuery() as CFData?, 10) != CFSocketError.success {
-                    NSLog("Error sending query packet")
-                }
-                
-                let _ = after(seconds: timeout).done { self.receivedData.send(nil) }
-                
-                return self.receivedData.wait().map { maybeQueryReply in
-                    if let queryReply = maybeQueryReply, queryReply.count > 0 {
-                        let reply = queryReply.unpackProperties()
-                  
-                        if let serverName = reply["Server"], let portString = reply["Port"], let port = Int(portString) {
-                            result = (serverName, port)
-                        }
-                        
-                        return false        // break the loop - got reply
-                    }
-                    else {
-                        return true         // Continue and try again
-                    }
+        defer { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode) }
+
+        for _ in 0..<retryCount {
+            if CFSocketSendData(socket, self.serverAddress as CFData?, self.createQuery() as CFData?, 10) != CFSocketError.success {
+                NSLog("Error sending query packet")
+            }
+
+            // Wait for reply or timeout
+            let replyTask = Task { () -> Data? in
+                return try? await self.receivedData.wait()
+            }
+            let timeoutTask = Task { () -> Data? in
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return nil
+            }
+
+            let maybeQueryReply: Data?
+            do {
+                maybeQueryReply = await withTaskGroup(of: Data?.self) { group in
+                    group.addTask { await replyTask.value }
+                    group.addTask { await timeoutTask.value }
+                    let first = await group.next() ?? nil
+                    group.cancelAll()
+                    return first
                 }
             }
-        }.map {_ in
-            result
-        }.ensure {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode)
+
+            if let queryReply = maybeQueryReply, queryReply.count > 0 {
+                let reply = queryReply.unpackProperties()
+                if let serverName = reply["Server"], let portString = reply["Port"], let port = Int(portString) {
+                    result = (serverName, port)
+                    break
+                }
+            } else {
+                // continue to next retry
+            }
         }
+
+        return result
     }
     
     func onReceived(data: Data) {

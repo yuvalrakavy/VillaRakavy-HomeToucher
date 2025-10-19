@@ -7,69 +7,66 @@
 //
 
 import Foundation
-import PromiseKit
+
+public enum PromisedQueueError: Error {
+    case streamFinished
+}
 
 public class PromisedQueue<T> {
-    public enum QueueEntry {
-        case Value(T)
-        case Error(Error)
-    }
-    public var queue: [QueueEntry] = []
-    
-    var fulfill: ((Bool) -> Void)? = nil
+    private let continuation: AsyncStream<T>.Continuation
+    public let stream: AsyncStream<T>
     
     let queueName: String
     let debugLevel: Int
-    
-    init(_ queueName: String, debugLevel: Int = 0) {
+
+    public init(_ queueName: String, debugLevel: Int = 0) {
         self.queueName = queueName
         self.debugLevel = debugLevel
+        
+        let (stream, continuation) = AsyncStream.makeStream(of: T.self)
+        self.stream = stream
+        self.continuation = continuation
     }
-    
+
     private func debug(_ message: String, minDebugLevel: Int = 1) {
-        if(self.debugLevel >= minDebugLevel) {
+        if self.debugLevel >= minDebugLevel {
             NSLog(message)
         }
     }
-    
-    public func wait() -> Promise<T> {
-        debug("\(queueName) Enter wait")
 
-        func dequeueValue() -> Promise<T> {
-            switch self.queue.removeFirst() {
-            case .Value(let v): return Promise.value(v)
-            case .Error(let e): return Promise.init(error: e)
-            }
-        }
-        
-        if !self.queue.isEmpty {
-            return dequeueValue()
-        }
-        else {
-            return Promise<Bool>(resolver: { r in
-                self.fulfill = r.fulfill
-            }).then { _ in
-                return dequeueValue()
-            }
-        }
-    }
-    
-    func signalQueue() {
-        if let fulfill = self.fulfill {
-            fulfill(true)
-            self.fulfill = nil
-        }
-    }
-    
     public func send(_ item: T) {
         debug("\(queueName) Send \(item)")
-        self.queue.append(.Value(item))
-        signalQueue()
+        continuation.yield(item)
     }
-    
+
     public func error(_ error: Error) {
         debug("\(queueName) error \(error)")
-        self.queue.append(.Error(error))
-        signalQueue()
+        continuation.finish()
+    }
+    
+    public func finish() {
+        debug("\(queueName) finished")
+        continuation.finish()
+    }
+    
+    public func wait() async throws -> T {
+        debug("\(queueName) waiting for next item", minDebugLevel: 2)
+
+        let waiter = Task<T, Error> {
+            for await item in stream {
+                return item
+            }
+            throw PromisedQueueError.streamFinished
+        }
+
+        return try await withTaskCancellationHandler {
+            try await waiter.value
+        } onCancel: {
+            debug("wait on \(queueName) canceled")
+            waiter.cancel()
+        }
+    }
+    deinit {
+        continuation.finish()
     }
 }

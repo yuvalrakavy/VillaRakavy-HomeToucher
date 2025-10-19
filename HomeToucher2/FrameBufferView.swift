@@ -87,11 +87,21 @@ class FrameBufferView : UIView, FrameBitmapView {
         
         let releaseDataCallback: CGDataProviderReleaseDataCallback = { _, data, size in }
         let dataProvider = CGDataProvider(dataInfo: nil, data: frameBuffer!.baseAddress!, size: pixelCount * MemoryLayout<PixelType>.size, releaseData: releaseDataCallback)
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
         
-        self.frameBufferImage = CGImage(width: Int(size.width), height: Int(size.height),
-                       bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: Int(size.width) * 4,
-                       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo.byteOrder32Big, provider: dataProvider!, decode: nil, shouldInterpolate: false,
-                       intent: CGColorRenderingIntent.defaultIntent)
+        self.frameBufferImage = CGImage(
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: Int(size.width) * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: bitmapInfo,
+            provider: dataProvider!,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: CGColorRenderingIntent.defaultIntent
+        )
     }
     
     public func freeFrameFrameBitmap() {

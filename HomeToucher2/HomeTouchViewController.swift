@@ -346,17 +346,18 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     
     func handleHometouchManagerChange() {
         Task { @MainActor in
-            // Single, long-lived consumer of the selection signal. Iterate the
-            // AsyncStream directly with ONE iterator: previously this called
-            // PromisedQueue.wait() in a loop, which created a fresh iterator each
-            // time. An AsyncStream supports only one iterator, so after the first
-            // selection further ones were dropped — which is why changing to a
-            // different zone while connected did not switch (the active session was
-            // never terminated). Terminating it makes the session loop reconnect to
-            // the newly-chosen zone.
-            for await service in self.homeTouchManagerServiceSelected.stream {
-                if service != nil || self.model.useSpecificServer {
-                    self.activeRfbSession?.terminate()
+            // Single, long-lived consumer of the selection signal. PromisedQueue.wait()
+            // is now cancellation-safe and delivers every value in order, so a loop of
+            // wait() correctly receives each selection. Terminating the active session
+            // makes the session loop reconnect to the newly-chosen zone.
+            while true {
+                do {
+                    let service = try await self.homeTouchManagerServiceSelected.wait()
+                    if service != nil || self.model.useSpecificServer {
+                        self.activeRfbSession?.terminate()
+                    }
+                } catch {
+                    break   // queue finished
                 }
             }
         }

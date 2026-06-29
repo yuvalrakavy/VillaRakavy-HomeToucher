@@ -273,22 +273,31 @@ public class NetworkChannel : NSObject, StreamDelegate {
     }
 
     public func sendToServer<T>(dataItem: T) async throws -> NetworkChannel {
-        guard state == .open else {
-            throw state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel
-        }
-
         let dataBuffer = UnsafeMutablePointer<T>.allocate(capacity: 1)
         dataBuffer.initialize(to: dataItem)
 
         defer { dataBuffer.deallocate() }
 
-        let _ = try await withCheckedThrowingContinuation { cont in
-            writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: { _ in
-                cont.resume(returning: self)
-            }, reject: { error in
-                cont.resume(throwing: error)
-            }))
-            initiateNextWriteRequest()
+        let _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<NetworkChannel, Error>) in
+            // Serialize ALL write-queue access on the main thread, where the stream
+            // delegate's writeNextChunk also runs. Concurrent senders (gestures + the
+            // ping + the frame-update-request, all on the cooperative pool) previously
+            // mutated writeRequestQueue/activeWriteRequest unsynchronized against the
+            // main-thread delegate — a data race that could corrupt the queue or
+            // double-resume/orphan a continuation. The state check is here too, so it
+            // reads `state` on the thread that writes it.
+            DispatchQueue.main.async {
+                guard self.state == .open else {
+                    cont.resume(throwing: self.state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
+                    return
+                }
+                self.writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: { _ in
+                    cont.resume(returning: self)
+                }, reject: { error in
+                    cont.resume(throwing: error)
+                }))
+                self.initiateNextWriteRequest()
+            }
         }
 
         return self
@@ -306,13 +315,20 @@ public class NetworkChannel : NSObject, StreamDelegate {
 
         defer { dataPointer.deallocate() }
 
-        let _ = try await withCheckedThrowingContinuation { cont in
-            writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: { _ in
-                cont.resume(returning: self)
-            }, reject: { error in
-                cont.resume(throwing: error)
-            }))
-            initiateNextWriteRequest()
+        let _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<NetworkChannel, Error>) in
+            // See sendToServer(dataItem:) — all write-queue access on the main thread.
+            DispatchQueue.main.async {
+                guard self.state == .open else {
+                    cont.resume(throwing: self.state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
+                    return
+                }
+                self.writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: { _ in
+                    cont.resume(returning: self)
+                }, reject: { error in
+                    cont.resume(throwing: error)
+                }))
+                self.initiateNextWriteRequest()
+            }
         }
 
         return self

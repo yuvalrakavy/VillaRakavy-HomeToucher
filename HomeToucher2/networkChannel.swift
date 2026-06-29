@@ -369,9 +369,11 @@ public class NetworkChannel : NSObject, StreamDelegate {
     
     public nonisolated func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
         // Streams are scheduled on RunLoop.main, so this callback fires on the main
-        // actor; route the work there.
+        // actor; route the work there. The Stream isn't Sendable but the hand-off is
+        // to the same (main) thread, so opt the local out of the sending check.
+        nonisolated(unsafe) let stream = aStream
         MainActor.assumeIsolated {
-            self.handleStreamEvent(aStream, eventCode)
+            self.handleStreamEvent(stream, eventCode)
         }
     }
 

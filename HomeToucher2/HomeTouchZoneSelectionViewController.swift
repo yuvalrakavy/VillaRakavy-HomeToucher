@@ -81,6 +81,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     // The browser is created in viewDidLoad (@MainActor), so it's scheduled on the
     // main runloop and these callbacks arrive on the main actor.
     public nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        nonisolated(unsafe) let service = service   // hand-off to the main actor (same thread)
         MainActor.assumeIsolated { self.handleDidFind(service: service, moreComing: moreComing) }
     }
 
@@ -126,6 +127,7 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     }
     
     public nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
+        nonisolated(unsafe) let service = service   // hand-off to the main actor (same thread)
         MainActor.assumeIsolated { self.handleDidRemove(service: service, moreComing: moreComing) }
     }
 

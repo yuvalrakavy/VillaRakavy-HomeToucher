@@ -25,6 +25,7 @@ let specificServerAddressKey = "SpecificServerAddress"
 public typealias GeoLocation = (longitude: Double, latitude: Double)
 public typealias iBeaconInfo = (major: UInt16, minor: UInt16)
 
+@MainActor
 public class HomeTouchModel {
     public var homeTouchManagerServiceName: String? {
         willSet(serviceName) {

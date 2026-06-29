@@ -322,15 +322,19 @@ public class NetworkChannel : NSObject, StreamDelegate {
     public func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
         if eventCode.contains(.errorOccurred) {
             switch state {
-            case .opening(_, let reject):
-                reject(NetworkChannelError.CannotConnectToServer("\(server):\(port)"))
-            case .firstStreamOpen(_, let reject):
+            case .opening(_, let reject), .firstStreamOpen(_, let reject):
+                // connect() opens TWO streams on the main RunLoop. A bad/unreachable
+                // host makes BOTH fire .errorOccurred. Transition out of the opening
+                // state BEFORE rejecting so the second stream's error can't resume the
+                // connect() continuation a second time (the "SWIFT TASK CONTINUATION
+                // MISUSE: tried to resume its continuation more than once" crash).
+                state = .error
                 reject(NetworkChannelError.CannotConnectToServer("\(server):\(port)"))
             default:
                 state = .error
 
                 self.gotInputBuffer.error(NetworkChannelError.ReadError)
-                
+
                 if let activeRequest = activeWriteRequest {
                     activeWriteRequest = nil
                     activeRequest.reject(NetworkChannelError.WriteError)
@@ -345,7 +349,10 @@ public class NetworkChannel : NSObject, StreamDelegate {
                     state = .open
                     fulfill(self)
                 default:
-                    assert(false, "Unexpected openCompleted")
+                    // A late/stray openCompleted (e.g. the sibling stream opening
+                    // after the other already errored, or after .open) is harmless —
+                    // never trap on it.
+                    NSLog("Ignoring unexpected openCompleted in state \(state)")
                 }
             }
             

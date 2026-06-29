@@ -51,7 +51,8 @@ public class RemoteFrameBufferSession {
     private var onTap: ((_ hitPoint: CGPoint) -> Void)?
     
     private var activeSession: SessionInfo?
-    
+    private var terminated = false      // set by terminate(); closes the terminate-vs-setup race
+
     let initializationStopwatch = StopWatch("Initialization")
     
     init(model: HomeTouchModel, frameBitmapView: FrameBitmapView, cacheManager: CacheManager) {
@@ -77,6 +78,7 @@ public class RemoteFrameBufferSession {
     
     public func begin(server: String, port: Int, onSessionStarted: (() -> Void)? = nil) async throws {
         debug("Starting RFB session")
+        self.terminated = false
         initializationStopwatch.start()
 
         func runSession(_ networkChannel: NetworkChannel) async throws {
@@ -116,14 +118,26 @@ public class RemoteFrameBufferSession {
                     }
                 }
 
+                // Capture the gesture continuations as Sendable locals so the cancel
+                // handler can finish them without touching @MainActor self.
+                let pressCont = self.pressContinuation!
+                let tapCont = self.tapContinuation!
+
                 await withTaskCancellationHandler {
                     async let gestures: Bool = self.handleGestures(networkChannel: networkChannel)
                     let serverInput = await serverInputTask.value
                     _ = await (gestures, serverInput)
                 } onCancel: {
-                    // Explicitly cancel the unstructured child so it can unblock promptly
+                    // Cancel the reader AND finish the gesture streams. An AsyncStream
+                    // `for await` does not end on Task.cancel(), so without finishing
+                    // pressStream/tapStream the `handleGestures` await never returns,
+                    // the session task never completes, and the `defer` (disconnect +
+                    // ping cancel) never runs — leaking a live session/socket/ping on
+                    // every reconnect.
                     NSLog("session task was canceled")
                     serverInputTask.cancel()
+                    pressCont.finish()
+                    tapCont.finish()
                 }
             }
             self.activeSession?.task = sessionTask
@@ -133,13 +147,30 @@ public class RemoteFrameBufferSession {
         }
 
         let networkChannel = try await self.initSession(server: server, port: port)
+
+        // If terminate() arrived during the connect/handshake (e.g. the user switched
+        // zones mid-connect), don't start a session the caller already abandoned.
+        if self.terminated {
+            networkChannel.disconnect()
+            self.view.freeFrameFrameBitmap()
+            return
+        }
+
         try await runSession(networkChannel)
     }
     
     public func terminate() {
         debug("RFBsession.terminate")
+        self.terminated = true          // unconditional: also covers terminate during setup
+        self.serverApiVersion = nil
+
+        // Finish the gesture streams directly so `handleGestures` unwinds and the
+        // session task's `defer` (disconnect + ping cancel) runs, even on paths where
+        // task cancellation isn't propagated (e.g. rfbTask cancel on viewWillDisappear).
+        self.pressContinuation?.finish()
+        self.tapContinuation?.finish()
+
         if let session = self.activeSession {
-            self.serverApiVersion = nil
             self.activeSession = nil
             session.cancel()
         }

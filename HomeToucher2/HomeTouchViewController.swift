@@ -22,7 +22,6 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     
     lazy var model: HomeTouchModel = HomeTouchModel()
     var activeRfbSession: RemoteFrameBufferSession? = nil
-    var terminateRfbSessions: (() -> Void)? = nil
     var rfbTask: Task<Void, Never>? = nil
     var delayedStateLabel: DelayedLabel? = nil
     
@@ -407,9 +406,12 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        
-        self.terminateRfbSessions?()
-        self.terminateRfbSessions = nil
+
+        // Actually tear the session down. Cancelling rfbTask alone does NOT stop the
+        // session: its sessionTask/pingTask are unstructured and don't inherit
+        // cancellation, so without an explicit terminate() the session, socket, and
+        // 5-minute ping kept running in the background after leaving the screen.
+        self.activeRfbSession?.terminate()
         self.rfbTask?.cancel()
         self.rfbTask = nil
     }

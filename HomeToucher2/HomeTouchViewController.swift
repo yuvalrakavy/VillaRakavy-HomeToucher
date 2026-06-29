@@ -269,6 +269,12 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     }
 
     func selectedHomeTouchManager(name: String, dismiss: Bool) {
+        // Picking a zone is the explicit "use this zone" choice and is mutually
+        // exclusive with direct-connect: turn off useSpecificServer so the session
+        // loop stops taking the (possibly invalid) specific-server branch and
+        // re-prompting. Set synchronously, before the async reconnect below.
+        self.model.useSpecificServer = false
+
         if dismiss {
             self.dismiss(animated: true, completion: nil)
         }

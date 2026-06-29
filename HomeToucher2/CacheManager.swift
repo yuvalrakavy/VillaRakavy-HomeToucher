@@ -63,23 +63,43 @@ public class CacheManager {
 
         self.keyFile.seek(toFileOffset: 0)
         let keyFileData = self.keyFile.readDataToEndOfFile()
-        let keyFileVersion = keyFileData.withUnsafeBytes { $0.load(as: UInt32.self) }
-        
-        if keyFileVersion != cacheVersion {
-            throw CacheError.InvalidCacheVersion
-        }
-        
-        let keyFileEntryCount = (keyFileData.count - MemoryLayout<UInt32>.size) / MemoryLayout<CacheKeyFileEntry>.size
-        
-        let keyFileEntries = keyFileData.withUnsafeBytes { pKeyFileData in
-            Array<CacheKeyFileEntry>(unsafeUninitializedCapacity: keyFileEntryCount) {  pKeyFileEntris, nElement in
-                nElement = keyFileEntryCount
-                pKeyFileData.copyBytes(to: pKeyFileEntris, from: MemoryLayout<UInt32>.size ..< keyFileData.count)      // Skip the version at the beginning
+
+        let headerSize = MemoryLayout<UInt32>.size
+        let entrySize = MemoryLayout<CacheKeyFileEntry>.size
+
+        // The cache is disposable. A truncated/corrupt key file (e.g. from a prior
+        // crash mid-write) must RESET it, never trap (load(as:) past end /
+        // copyBytes overflow) and never throw (which would fatalError in the
+        // controller's init).
+        let keyFileVersion: UInt32 = keyFileData.count >= headerSize
+            ? keyFileData.withUnsafeBytes { $0.load(as: UInt32.self) }
+            : 0
+
+        if keyFileVersion == cacheVersion {
+            // Parse only WHOLE entries; ignore any partial trailing entry so the
+            // copy can never exceed the destination buffer.
+            let keyFileEntryCount = max(0, (keyFileData.count - headerSize) / entrySize)
+            let bytesToCopy = keyFileEntryCount * entrySize
+
+            if keyFileEntryCount > 0 {
+                let keyFileEntries = keyFileData.withUnsafeBytes { pKeyFileData in
+                    Array<CacheKeyFileEntry>(unsafeUninitializedCapacity: keyFileEntryCount) {  pKeyFileEntris, nElement in
+                        nElement = keyFileEntryCount
+                        pKeyFileData.copyBytes(to: pKeyFileEntris, from: headerSize ..< (headerSize + bytesToCopy))
+                    }
+                }
+
+                for keyFileEntry in keyFileEntries {
+                    cacheMap[keyFileEntry.cacheKey] = keyFileEntry.dataOffset
+                }
             }
-        }
-        
-        for keyFileEntry in keyFileEntries {
-            cacheMap[keyFileEntry.cacheKey] = keyFileEntry.dataOffset
+        } else {
+            // Wrong/old/corrupt version: reset the key file to a clean state.
+            NSLog("Cache key file invalid (version \(keyFileVersion), \(keyFileData.count) bytes); resetting")
+            self.keyFile.truncateFile(atOffset: 0)
+            self.keyFile.seek(toFileOffset: 0)
+            self.keyFile.write(withUnsafeBytes(of: cacheVersion) { Data($0) })
+            self.keyFile.synchronizeFile()
         }
 
         let aDataFile = FileHandle(forUpdatingAtPath: dataFileUrl.path)

@@ -33,7 +33,13 @@ public class HomeTouchManager {
         let runLoopSource = CFSocketCreateRunLoopSource(nil, socket, 100)
 
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode)
-        defer { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode) }
+        defer {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, CFRunLoopMode.defaultMode)
+            // Invalidate the socket so its file descriptor is closed. Without this,
+            // getServer() leaked an fd per call — across the reconnect loop that
+            // eventually exhausts descriptors.
+            if let socket { CFSocketInvalidate(socket) }
+        }
 
         for _ in 0..<retryCount {
             if CFSocketSendData(socket, self.serverAddress as CFData?, self.createQuery() as CFData?, 10) != CFSocketError.success {

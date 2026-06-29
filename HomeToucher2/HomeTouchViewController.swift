@@ -25,7 +25,10 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     var rfbTask: Task<Void, Never>? = nil
     var delayedStateLabel: DelayedLabel? = nil
     
-    let homeTouchManagerServiceSelected = PromisedQueue<NetService?>("service-selected")
+    // Carries "a service was selected" as a Bool (true = a manager service, false =
+    // cancelled/none). It never needs the NetService itself, so a Bool avoids
+    // transferring a non-Sendable NetService through the queue.
+    let homeTouchManagerServiceSelected = PromisedQueue<Bool>("service-selected")
     let deviceShaken = PromisedQueue<Bool>("device-shaken")
 
     let locationManager = CLLocationManager()
@@ -244,7 +247,7 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     func homeTouchManagerSelectionCanceled() {
         self.dismiss(animated: true, completion: nil)
         self.zoneSelectionController = nil
-        homeTouchManagerServiceSelected.send(nil)
+        homeTouchManagerServiceSelected.send(false)
     }
     
     func removeHomeTouchManager(name: String) {
@@ -258,9 +261,9 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
             let theService = await HomeTouchManagerBrowser(defaultManagerName: name).findManager()
             if let service = theService {
                 self.model.add(service: service)
-                self.homeTouchManagerServiceSelected.send(service)
+                self.homeTouchManagerServiceSelected.send(true)
             } else {
-                self.homeTouchManagerServiceSelected.send(nil)
+                self.homeTouchManagerServiceSelected.send(false)
             }
         }
     }
@@ -351,8 +354,8 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
             // makes the session loop reconnect to the newly-chosen zone.
             while true {
                 do {
-                    let service = try await self.homeTouchManagerServiceSelected.wait()
-                    if service != nil || self.model.useSpecificServer {
+                    let serviceSelected = try await self.homeTouchManagerServiceSelected.wait()
+                    if serviceSelected || self.model.useSpecificServer {
                         self.activeRfbSession?.terminate()
                     }
                 } catch {
@@ -468,6 +471,7 @@ enum SessionError: Error {
 
 private enum DelayedLabelCancellation: Error { case cancelled }
 
+@MainActor
 class DelayedLabel {
     unowned let label: UILabel
     private var task: Task<Void, Never>?

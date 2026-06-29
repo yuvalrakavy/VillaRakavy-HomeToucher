@@ -6,7 +6,7 @@
 //  Copyright © 2015 Yuval Rakavy. All rights reserved.
 //
 
-import Foundation
+@preconcurrency import Foundation   // NetService/NetServiceBrowser predate Sendable
 import UIKit
 
 public protocol GeoSelectDelegate {
@@ -78,7 +78,13 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     @IBOutlet weak var navigationBar: UINavigationBar!
     @IBOutlet weak var backButton: UIBarButtonItem!
     
-    public func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+    // The browser is created in viewDidLoad (@MainActor), so it's scheduled on the
+    // main runloop and these callbacks arrive on the main actor.
+    public nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        MainActor.assumeIsolated { self.handleDidFind(service: service, moreComing: moreComing) }
+    }
+
+    private func handleDidFind(service: NetService, moreComing: Bool) {
         if !self.list.contains(where: { entry in entry.info.name == service.name }) {
             newServices.append(service)
         }
@@ -119,11 +125,15 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
         return results
     }
     
-    public func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
+    public nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
+        MainActor.assumeIsolated { self.handleDidRemove(service: service, moreComing: moreComing) }
+    }
+
+    private func handleDidRemove(service: NetService, moreComing: Bool) {
         if let index = list.firstIndex(where: { entry in entry.info.name == service.name }) {
             list.remove(at: index)
         }
-        
+
         if !moreComing {
             homeTouchManagerServiceTable?.reloadData()
         }

@@ -6,11 +6,12 @@
 //  Copyright © 2016 Yuval Rakavy. All rights reserved.
 //
 
-import Foundation
+@preconcurrency import Foundation
 import UIKit
 
 public typealias HostAddress = (hostname: String, port: Int)
 
+@MainActor
 public class HomeTouchManager {
     private var serverAddress: Data
     private var resolveRecievedData: ((Data) -> Void)?
@@ -80,7 +81,9 @@ public class HomeTouchManager {
         return result
     }
     
-    func onReceived(data: Data) {
+    // Called from the CFSocket C callback (nonisolated). Only touches the
+    // thread-safe receivedData queue (a Sendable `let`), so it needs no isolation.
+    nonisolated func onReceived(data: Data) {
         self.receivedData.send(data)
     }
     

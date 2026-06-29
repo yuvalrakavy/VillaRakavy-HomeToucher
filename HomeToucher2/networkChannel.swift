@@ -6,7 +6,7 @@
 //  Copyright © 2015 Yuval Rakavy. All rights reserved.
 //
 
-import Foundation
+@preconcurrency import Foundation   // Stream/InputStream/OutputStream predate Sendable
 
 enum NetworkChannelError : Error {
     case OpeningNonClosedChannel
@@ -77,6 +77,19 @@ private class ActiveRequest {
     }
 }
 
+// Ownership of a freshly-read input buffer is transferred from the stream delegate
+// to the reader through `gotInputBuffer`. The raw pointer makes the tuple
+// non-Sendable; this box asserts the (genuine) exclusive hand-off so it can cross.
+private struct InputBuffer: @unchecked Sendable {
+    let byteCount: Int
+    let buffer: UnsafeMutableRawPointer
+}
+
+// @MainActor: the streams are scheduled on RunLoop.main, so the StreamDelegate
+// callbacks already arrive on the main thread. Isolating the whole class means the
+// write queue and input-buffer state are touched from ONE executor (the main actor) —
+// the write race is gone, compiler-enforced, with no manual dispatch/lock needed.
+@MainActor
 public class NetworkChannel : NSObject, StreamDelegate {
     private var inputStream: InputStream?
     private var outputStream: OutputStream?
@@ -93,7 +106,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
     private var bytesInInputBuffer: Int
    
     private var inputBufferIndex: Int
-    private let gotInputBuffer = PromisedQueue<(byteCount: Int, buffer: UnsafeMutableRawPointer)>("gotInputBuffer")
+    private let gotInputBuffer = PromisedQueue<InputBuffer>("gotInputBuffer")
     
     init(server: String, port: Int) {
         self.server = server
@@ -135,16 +148,21 @@ public class NetworkChannel : NSObject, StreamDelegate {
     
     func disconnect() {
         state = .closed
-        
+
         if let stream = inputStream {
             deinitStream(stream: stream)
             inputStream = nil
         }
-        
+
         if let stream = outputStream {
             deinitStream(stream: stream)
             outputStream = nil
         }
+
+        // Free the current input buffer (this is where the raw buffer is released now
+        // that the @MainActor class has no nonisolated deinit to do it).
+        inputBufferPointer?.deallocate()
+        inputBufferPointer = nil
 
         // Resume any pending/active write continuations so the tasks awaiting them
         // don't leak (continuation misuse / suspended forever).
@@ -177,10 +195,6 @@ public class NetworkChannel : NSObject, StreamDelegate {
         rejectAllPendingWrites(NetworkChannelError.WriteError)
     }
     
-    deinit {
-        self.inputBufferPointer?.deallocate()
-        disconnect()
-    }
     
     private func deinitStream(stream: Stream) {
         stream.remove(from: RunLoop.main, forMode: RunLoop.Mode.default)
@@ -273,37 +287,35 @@ public class NetworkChannel : NSObject, StreamDelegate {
     }
 
     public func sendToServer<T>(dataItem: T) async throws -> NetworkChannel {
+        guard state == .open else {
+            throw state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel
+        }
+
         let dataBuffer = UnsafeMutablePointer<T>.allocate(capacity: 1)
         dataBuffer.initialize(to: dataItem)
 
         defer { dataBuffer.deallocate() }
 
+        // @MainActor serializes all write-queue access (this method + the delegate's
+        // writeNextChunk both run on the main actor), so the append + initiate are
+        // race-free without any manual dispatch.
         let _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<NetworkChannel, Error>) in
-            // Serialize ALL write-queue access on the main thread, where the stream
-            // delegate's writeNextChunk also runs. Concurrent senders (gestures + the
-            // ping + the frame-update-request, all on the cooperative pool) previously
-            // mutated writeRequestQueue/activeWriteRequest unsynchronized against the
-            // main-thread delegate — a data race that could corrupt the queue or
-            // double-resume/orphan a continuation. The state check is here too, so it
-            // reads `state` on the thread that writes it.
-            DispatchQueue.main.async {
-                guard self.state == .open else {
-                    cont.resume(throwing: self.state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
-                    return
-                }
-                self.writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: { _ in
-                    cont.resume(returning: self)
-                }, reject: { error in
-                    cont.resume(throwing: error)
-                }))
-                self.initiateNextWriteRequest()
-            }
+            writeRequestQueue.append(Request(length: MemoryLayout<T>.size, buffer: OpaquePointer(dataBuffer), fulfill: { _ in
+                cont.resume(returning: self)
+            }, reject: { error in
+                cont.resume(throwing: error)
+            }))
+            initiateNextWriteRequest()
         }
 
         return self
     }
     
     public func sendToServer<T: Collection>(dataItems: T) async throws -> NetworkChannel {
+        guard state == .open else {
+            throw state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel
+        }
+
         guard state == .open else {
             throw state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel
         }
@@ -316,19 +328,12 @@ public class NetworkChannel : NSObject, StreamDelegate {
         defer { dataPointer.deallocate() }
 
         let _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<NetworkChannel, Error>) in
-            // See sendToServer(dataItem:) — all write-queue access on the main thread.
-            DispatchQueue.main.async {
-                guard self.state == .open else {
-                    cont.resume(throwing: self.state == .error ? NetworkChannelError.WriteError : NetworkChannelError.SendingToNonOpenChannel)
-                    return
-                }
-                self.writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: { _ in
-                    cont.resume(returning: self)
-                }, reject: { error in
-                    cont.resume(throwing: error)
-                }))
-                self.initiateNextWriteRequest()
-            }
+            writeRequestQueue.append(Request(length: MemoryLayout<T.Iterator.Element>.size * count, buffer: OpaquePointer(dataBuffer.baseAddress!), fulfill: { _ in
+                cont.resume(returning: self)
+            }, reject: { error in
+                cont.resume(throwing: error)
+            }))
+            initiateNextWriteRequest()
         }
 
         return self
@@ -362,7 +367,15 @@ public class NetworkChannel : NSObject, StreamDelegate {
 
     // MARK: Stream delegate
     
-    public func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
+    public nonisolated func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
+        // Streams are scheduled on RunLoop.main, so this callback fires on the main
+        // actor; route the work there.
+        MainActor.assumeIsolated {
+            self.handleStreamEvent(aStream, eventCode)
+        }
+    }
+
+    private func handleStreamEvent(_ aStream: Stream, _ eventCode: Stream.Event) {
         if eventCode.contains(.errorOccurred) {
             switch state {
             case .opening(_, let reject), .firstStreamOpen(_, let reject):
@@ -399,7 +412,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
                     let buffer = UnsafeMutableRawPointer.allocate(byteCount: self.inputBufferSize, alignment: 8)
                     let count = self.inputStream!.read(buffer.assumingMemoryBound(to: UInt8.self), maxLength: self.inputBufferSize)
 
-                    self.gotInputBuffer.send((byteCount: count, buffer: buffer))
+                    self.gotInputBuffer.send(InputBuffer(byteCount: count, buffer: buffer))
                 }
             }
             

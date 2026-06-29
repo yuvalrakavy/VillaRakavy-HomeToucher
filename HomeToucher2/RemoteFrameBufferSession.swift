@@ -11,10 +11,11 @@ import UIKit
 
 public typealias PixelType = UInt32
 
+@MainActor
 public protocol FrameBitmapView {
     func allocateFrameBitmap(size: CGSize)
     func freeFrameFrameBitmap()
-    
+
     func redisplay(rect: CGRect)
     func getHitPoint(recognizer: UIGestureRecognizer) -> CGPoint?
 
@@ -82,12 +83,12 @@ public class RemoteFrameBufferSession {
         initializationStopwatch.start()
 
         func runSession(_ networkChannel: NetworkChannel) async throws {
-            let pingTask = Task.detached { [weak self] in
+            let pingTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 while !Task.isCancelled {
-                    await MainActor.run { self.debug("Ping: Sending to server") }
-                    if let channel = await MainActor.run (body: { self.activeSession?.networkChannel }) {
-                        let data = await MainActor.run { self.formatSetCutText(text: "") }
+                    self.debug("Ping: Sending to server")
+                    if let channel = self.activeSession?.networkChannel {
+                        let data = self.formatSetCutText(text: "")
                         _ = try? await channel.sendToServer(dataItems: data)
                     }
                     try? await Task.sleep(nanoseconds: UInt64(self.serverPingInterval * 1_000_000_000))

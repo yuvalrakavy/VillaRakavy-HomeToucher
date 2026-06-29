@@ -6,9 +6,10 @@
 //  Copyright © 2016 Yuval Rakavy. All rights reserved.
 //
 
-import Foundation
+@preconcurrency import Foundation   // NetService/NetServiceBrowser predate Sendable
 import UIKit
 
+@MainActor
 public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
     private typealias ServiceInfo = (service: NetService, more: Bool)
     private var foundService: PromisedQueue<Bool>? = nil
@@ -66,7 +67,15 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
         return result
     }
     
-    public func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+    // The browser is scheduled on the main runloop (searchForServices is called from
+    // the @MainActor findManager), so this callback arrives on the main actor.
+    public nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        MainActor.assumeIsolated {
+            self.handleDidFind(service: service, moreComing: moreComing)
+        }
+    }
+
+    private func handleDidFind(service: NetService, moreComing: Bool) {
         NSLog("Found service: \(service.name)")
         if let foundService = self.foundService {
             var done = false
@@ -96,31 +105,42 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
     }
 }
 
+@MainActor
 public class ServiceAddressResolver: NSObject, NetServiceDelegate {
-    var fulfill: ((NetService?) -> Void)? = nil
-    
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var resolvedService: NetService?
+
     public func resolveServiceAddress(service: NetService, timeout: TimeInterval = 4) async -> NetService? {
-        return await withCheckedContinuation { (cont: CheckedContinuation<NetService?, Never>) in
-            Task { @MainActor in
-                self.fulfill = { resolved in
-                    cont.resume(returning: resolved)
-                }
-                service.delegate = self
-                service.resolve(withTimeout: timeout)
-            }
+        self.resolvedService = nil
+        service.delegate = self
+        service.resolve(withTimeout: timeout)
+        // Resume with Void (not the NetService) so a non-Sendable NetService never
+        // crosses the continuation; read the result from the MainActor property
+        // that the delegate set before resuming.
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            self.continuation = cont
+        }
+        return self.resolvedService
+    }
+
+    // resolve(withTimeout:) is scheduled on the main runloop (called from the
+    // @MainActor resolveServiceAddress), so these callbacks arrive on the main actor.
+    public nonisolated func netServiceDidResolveAddress(_ sender: NetService) {
+        MainActor.assumeIsolated {
+            sender.delegate = nil
+            self.resolvedService = sender
+            self.continuation?.resume()
+            self.continuation = nil
         }
     }
-    
-    public func netServiceDidResolveAddress(_ sender: NetService) {
-        sender.delegate = nil
-        self.fulfill?(sender)
-        self.fulfill = nil
-    }
-    
-    public func netService(_ sender: NetService, didNotResolve errorDict: [String : NSNumber]) {
-        sender.delegate = nil
-        self.fulfill?(nil)
-        self.fulfill = nil
+
+    public nonisolated func netService(_ sender: NetService, didNotResolve errorDict: [String : NSNumber]) {
+        MainActor.assumeIsolated {
+            sender.delegate = nil
+            self.resolvedService = nil
+            self.continuation?.resume()
+            self.continuation = nil
+        }
     }
 }
 

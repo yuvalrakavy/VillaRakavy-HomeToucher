@@ -69,7 +69,13 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
             // previously crashed (or spun) the moment the user enabled the switch
             // before typing a valid address.
             let host = (model.specificServerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !host.isEmpty {
+            // A usable host is a non-empty IPv4 address or DNS hostname: ASCII
+            // letters/digits/dot/hyphen only. This rejects leftover garbage (e.g.
+            // non-ASCII text) so it's treated as "no address" instead of being
+            // retried forever.
+            let hostAllowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+            let hostIsValid = !host.isEmpty && host.unicodeScalars.allSatisfy { hostAllowed.contains($0) }
+            if hostIsValid {
                 return (host, model.specificServerPort)
             } else {
                 // No usable address yet — do NOT attempt to connect. Wait briefly and
@@ -167,6 +173,12 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
                 self.activeRfbSession = RemoteFrameBufferSession(model: self.model, frameBitmapView: self.frameBufferView, cacheManager: self.cacheManager)
                 self.activeRfbSession?.onApiCall = self.dispatchApi
 
+                // Remove any recognizers left by a previous session before adding
+                // this session's, so they don't accumulate on the view across the
+                // reconnect loop.
+                if let existing = self.frameBufferView?.gestureRecognizers {
+                    for r in existing { self.frameBufferView?.removeGestureRecognizer(r) }
+                }
                 for r in self.activeRfbSession!.getRecognizers() {
                     self.frameBufferView?.addGestureRecognizer(r)
                 }
@@ -178,6 +190,10 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
                 } catch {
                     NSLog("RFB session terminated with error: \(error)")
                     self.activeRfbSession = nil
+                    // Back off before the caller retries, so a persistently-failing
+                    // connection (unreachable / invalid host) cannot busy-loop and
+                    // drain CPU/battery.
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
                 }
             }
 

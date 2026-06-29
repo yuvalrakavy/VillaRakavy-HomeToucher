@@ -78,11 +78,14 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
             if hostIsValid {
                 return (host, model.specificServerPort)
             } else {
-                // No usable address yet — do NOT attempt to connect. Wait briefly and
-                // let the caller retry; the connection self-heals once the user enters
-                // a valid address (no crash, no busy-loop).
-                NSLog("Specific server is enabled but no address has been entered yet; waiting")
+                // No usable address. Surface the selector (once) so the user can type
+                // one or turn the option off, then wait and let the loop re-read the
+                // setting on the next iteration. Self-heals; no crash, no busy-loop.
+                NSLog("Specific server is enabled but no valid address; prompting for configuration")
                 self.stateLabel.text = NSLocalizedString("LookingForHomeTouchServer", comment: "")
+                if self.zoneSelectionController == nil {
+                    self.selectHomeTouchManager()
+                }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 throw HomeTouchControllerError.GetServerOperationAborted
             }

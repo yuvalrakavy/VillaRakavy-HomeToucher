@@ -360,15 +360,29 @@ public class SpecificServerCell : UITableViewCell {
     
     @IBAction func specificServerSwitchChanged(_ sender: Any) {
         self.connectToLabel.isEnabled = self.specificServerSwitch.isOn
+        self.specificServerAddress.isEnabled = self.specificServerSwitch.isOn
         self.delegate?.model.useSpecificServer = self.specificServerSwitch.isOn
-        
-        if self.specificServerSwitch.isOn {
+
+        // Only auto-apply (dismiss + reconnect) when there is already an address to
+        // connect to. Otherwise keep the selector open so the user can type one —
+        // dismissing here was why the address could never be entered.
+        if self.specificServerSwitch.isOn,
+           let addr = self.delegate?.model.specificServerAddress,
+           !addr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             self.delegate?.homeTouchManagerSelectionCanceled()
         }
     }
-    
+
     @IBAction func specificServerEditingDone(_ sender: Any) {
         self.delegate?.model.specificServerAddress = self.specificServerAddress.text
+
+        // Apply the freshly-entered address: close the selector so the session loop
+        // reconnects using it.
+        if self.delegate?.model.useSpecificServer == true,
+           let addr = self.specificServerAddress.text,
+           !addr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            self.delegate?.homeTouchManagerSelectionCanceled()
+        }
     }
 }
 

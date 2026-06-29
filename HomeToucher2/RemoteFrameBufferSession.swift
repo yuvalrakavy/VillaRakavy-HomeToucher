@@ -208,7 +208,13 @@ public class RemoteFrameBufferSession {
     private func doVersionHandshake(_ networkChannel: NetworkChannel) async throws -> NetworkChannel {
         let serverVersionBytes: [UInt8] = try await networkChannel.getFromServer(type: UInt8.self, count: 12)
         let version = [UInt8]("RFB 003.008\n".utf8)
-        let serverVersion = String(bytes: serverVersionBytes, encoding: String.Encoding.utf8)!
+        // Don't force-unwrap: a wrong host/port (or a host that isn't an RFB server)
+        // sends bytes that aren't a valid UTF-8 "RFB xxx.yyy" banner. Fail cleanly so
+        // the session loop can recover instead of trapping.
+        guard let serverVersion = String(bytes: serverVersionBytes, encoding: String.Encoding.utf8),
+              serverVersion.hasPrefix("RFB ") else {
+            throw SessionError.InvalidConnection(errorMessage: "Not an RFB server (unexpected handshake response)")
+        }
         self.debug("Sever RFB version \(serverVersion)")
         _ = try await networkChannel.sendToServer(dataItems: version)
         return networkChannel
@@ -248,7 +254,7 @@ public class RemoteFrameBufferSession {
     private func getErrorMessage(networkChannel: NetworkChannel) async throws -> String {
         let count: UInt32 = try await networkChannel.getFromServer(type: UInt32.self)
         let bytes: [UInt8] = try await networkChannel.getFromServer(type: UInt8.self, count: Int(count.bigEndian))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        return String(bytes: bytes, encoding: String.Encoding.utf8) ?? "Unknown server error"
     }
     
     private func handleServerInput(networkChannel: NetworkChannel) async throws -> Bool {

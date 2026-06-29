@@ -60,14 +60,30 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     }
         
     func getRfbServer(isCancelled: @escaping () async -> Bool) async throws -> HostAddress {
-        if model.homeTouchManagerServiceName == nil {
-            _ = await self.ensureHasHometouchService()
-        }
-
         self.frameBufferView.lowRes = model.lowRes
 
-        if model.useSpecificServer, let specificServerName = model.specificServerName {
-            return (specificServerName, model.specificServerPort)
+        // Specific-server mode: connect directly to a user-entered host[:port].
+        if model.useSpecificServer {
+            // `specificServerName` returns "" (not nil) for a blank address, so an
+            // emptiness/whitespace check is required: connecting to an empty host
+            // previously crashed (or spun) the moment the user enabled the switch
+            // before typing a valid address.
+            let host = (model.specificServerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !host.isEmpty {
+                return (host, model.specificServerPort)
+            } else {
+                // No usable address yet — do NOT attempt to connect. Wait briefly and
+                // let the caller retry; the connection self-heals once the user enters
+                // a valid address (no crash, no busy-loop).
+                NSLog("Specific server is enabled but no address has been entered yet; waiting")
+                self.stateLabel.text = NSLocalizedString("LookingForHomeTouchServer", comment: "")
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                throw HomeTouchControllerError.GetServerOperationAborted
+            }
+        }
+
+        if model.homeTouchManagerServiceName == nil {
+            _ = await self.ensureHasHometouchService()
         }
 
         if let homeTouchManagerAddress = self.model.homeTouchManagerServiceAddress {
@@ -83,8 +99,11 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
                 return try await self.getServerAddressWithRetry(isCancelled: isCancelled)
             }
         } else {
-            assert(false, "No address for default hometouch server \(self.model.homeTouchManagerServiceName ?? "NO-NAME")")
-            return (hostname: "", port: 0)
+            // No manager address available. Abort this attempt cleanly and let the loop
+            // retry (was: assert(false) → trap in debug / bogus ("",0) connect in release).
+            NSLog("No address for hometouch server \(self.model.homeTouchManagerServiceName ?? "NO-NAME")")
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            throw HomeTouchControllerError.GetServerOperationAborted
         }
     }
     

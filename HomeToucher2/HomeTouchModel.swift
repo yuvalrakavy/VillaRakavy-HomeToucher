@@ -199,8 +199,12 @@ public class HomeTouchModel {
         if let longitudes = store.dictionary(forKey: ManagerLocationslongitudeKey) as? [String: Double],
            let latitudes = store.dictionary(forKey: ManagerLocationsLatitudeKey) as? [String: Double] {
             
-            for (name, _) in longitudes {
-                self.managerLocations[name] = CLLocation(latitude: latitudes[name]!, longitude: longitudes[name]!)
+            for (name, longitude) in longitudes {
+                // The two dictionaries are persisted separately and can desync (a
+                // partial write / older version); skip rather than force-unwrap-trap.
+                if let latitude = latitudes[name] {
+                    self.managerLocations[name] = CLLocation(latitude: latitude, longitude: longitude)
+                }
             }
         }
         
@@ -219,9 +223,12 @@ public class HomeTouchModel {
     static func getDestinationIpV4address(homeTouchManagerService: NetService) -> Data? {
         if let addresses = homeTouchManagerService.addresses {
             for addressData in addresses {
+                // A sockaddr record from the network can be short/empty; load(as:)
+                // would trap on fewer than MemoryLayout<AddressInfo>.size bytes.
+                guard addressData.count >= MemoryLayout<AddressInfo>.size else { continue }
                 let addressInfo: AddressInfo = HomeTouchModel.decode(data: addressData)
                 //let addr: sockaddr_storage = HomeTouchModel.decode(data: addressData)
-                
+
                 if addressInfo.family == UInt8(AF_INET) {
                     return addressData;
                 }

@@ -41,13 +41,46 @@ class FrameBufferUpdater {
     }
     
     func fillSubrect(tileRectangle: CGRect, subrect: CGRect, color: PixelType) {
-        let subRectOffset = (Int(tileRectangle.origin.y + subrect.origin.y)) * rowOffset + Int(tileRectangle.origin.x + subrect.origin.x)
-        let subRectWidth = Int(subrect.size.width)
-        var pFrameBitmap = frameBitmap.baseAddress?.advanced(by: subRectOffset)
-         
-        for _ in 0 ..< Int(subrect.size.height) {
-            pFrameBitmap?.initialize(repeating: color, count: subRectWidth)
-            pFrameBitmap = pFrameBitmap?.advanced(by: rowOffset)
+        // `fillSubrect` writes through a raw pointer with no bounds check, so any
+        // out-of-range geometry (edge tiles, or hextile subrect nibbles where
+        // x+width can reach 31 inside a 16px tile) would smash the heap. Clamp the
+        // destination span to the framebuffer before writing.
+        let fbWidth = rowOffset
+        let fbHeight = fbWidth > 0 ? frameBitmap.count / fbWidth : 0
+
+        let startX = Int(tileRectangle.origin.x + subrect.origin.x)
+        let startY = Int(tileRectangle.origin.y + subrect.origin.y)
+        let rawWidth = Int(subrect.size.width)
+        let rawHeight = Int(subrect.size.height)
+
+        guard rawWidth > 0, rawHeight > 0, startX < fbWidth, startY < fbHeight else { return }
+
+        let clampedX = max(0, startX)
+        let clampedY = max(0, startY)
+        let width = min(rawWidth - (clampedX - startX), fbWidth - clampedX)
+        let height = min(rawHeight - (clampedY - startY), fbHeight - clampedY)
+        guard width > 0, height > 0, let base = frameBitmap.baseAddress else { return }
+
+        var pFrameBitmap = base.advanced(by: clampedY * rowOffset + clampedX)
+        for _ in 0 ..< height {
+            pFrameBitmap.initialize(repeating: color, count: width)
+            pFrameBitmap = pFrameBitmap.advanced(by: rowOffset)
+        }
+    }
+
+    /// Reject a rectangle whose server-supplied geometry falls outside the
+    /// framebuffer before any pixel is written. A conforming server never does
+    /// this; a malformed/oversized rectangle would otherwise index `frameBitmap`
+    /// out of bounds (subscript trap) or overrun a raw pointer write.
+    fileprivate func validateRectangle(_ header: RFB_RectangleHeader) throws {
+        let fbWidth = Int(frameBufferInfo.width)
+        let fbHeight = Int(frameBufferInfo.height)
+
+        guard header.x >= 0, header.y >= 0,
+              header.width >= 0, header.height >= 0,
+              header.x + header.width <= fbWidth,
+              header.y + header.height <= fbHeight else {
+            throw FrameBufferViewError.OutOfBounds
         }
     }
 }
@@ -97,7 +130,8 @@ class SynchronousFrameBufferUpdater : FrameBufferUpdater {
 
     private func updateRectangle() throws {
         let header: RFB_RectangleHeader = try get()
-        
+        try validateRectangle(header)
+
         switch header.encoding {
         case 0:
             try applyRawEncoding(header)
@@ -275,7 +309,8 @@ class StreamBufferUpdater : FrameBufferUpdater {
     
     private func updateRectangle() async throws {
         let header: RFB_RectangleHeader = try await self.networkChannel.getFromServer(type: RFB_RectangleHeader.self)
-        
+        try validateRectangle(header)
+
         switch header.encoding {
         case 0:
             try await self.processRawEncoding(header)

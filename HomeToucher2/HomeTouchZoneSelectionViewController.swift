@@ -144,49 +144,50 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     
     public func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if indexPath.section == 0 {
+            // `list` is mutated from async Bonjour callbacks; guard against a
+            // reload/mutation race producing an out-of-range row.
+            guard indexPath.row < list.count else { return UITableViewCell() }
             let entry = list[indexPath.row]
             let cell = tableView.dequeueReusableCell(withIdentifier: entry.info.geoDescription != nil ? "GeoZoneEntry" : "ZoneEntry") as? ZoneEntry
-            
+
             if cell != nil {
                 cell!.selectedCheckmark.text = entry.info.name == delegate?.getCurrentHomeTouchManagerName() ? "✓" : ""
                 cell!.name.text = entry.info.name
-                
+
                 if let geoDescription = entry.info.geoDescription {
-                    let geoCell = cell as! GeoZoneEntry
-                    
-                    geoCell.geoDescription.text = geoDescription
+                    (cell as? GeoZoneEntry)?.geoDescription.text = geoDescription
                 }
             }
-            
-            return cell!
+
+            return cell ?? UITableViewCell()
         }
         else if indexPath.section == 1 {
             let aCell = tableView.dequeueReusableCell(withIdentifier: "cacheControl") as? CacheControlCell
-            
+
             if let cell = aCell, let info = delegate?.cacheManager.getInfo(), let model = delegate?.model {
                 cell.cacheInfoLabel.text = "(\(info.nItems) \(info.nItems == 1 ? "item" : "items"), \(info.cacheSize) bytes)"
                 cell.cacheLabel.isEnabled = !model.DisableCaching
                 cell.cacheInfoLabel.isEnabled = !model.DisableCaching
                 cell.cacheEnableSwitch.isOn = !model.DisableCaching
             }
-            
-            return aCell!
+
+            return aCell ?? UITableViewCell()
         }
         else if indexPath.section == 2 {
             let cell = tableView.dequeueReusableCell(withIdentifier: "geoEnable") as? GeoSelectCell
-            
+
             cell?.delegate = self.delegate?.geoSelectDelegate
             cell?.update()
-            return cell!
+            return cell ?? UITableViewCell()
         }
         else if indexPath.section == 3 {
             let aCell = tableView.dequeueReusableCell(withIdentifier: "specificServer") as? SpecificServerCell
-            
+
             if let cell = aCell {
                 cell.setup(delegate)
             }
-            
-            return aCell!
+
+            return aCell ?? UITableViewCell()
         }
         else if indexPath.section == 4 {
             let cell = tableView.dequeueReusableCell(withIdentifier: "iBeacon") as? iBeaconCell
@@ -196,16 +197,16 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
                 cell?.setup(delegate: beaconDelegate, model: delegate.model)
             }
             #endif
-            
-            return cell!
+
+            return cell ?? UITableViewCell()
         }
         else {
-            fatalError("Unexpected table section")
+            return UITableViewCell()
         }
     }
     
     public func tableView(_: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == UITableViewCell.EditingStyle.delete && indexPath.section == 0 {
+        if editingStyle == UITableViewCell.EditingStyle.delete && indexPath.section == 0 && indexPath.row < list.count {
             delegate?.removeHomeTouchManager(name: list[indexPath.row].info.name)
             list.remove(at: indexPath.row)
             homeTouchManagerServiceTable?.deleteRows(at: [indexPath], with: UITableView.RowAnimation.automatic)
@@ -214,8 +215,9 @@ public class HomeTouchZoneSelectionViewController : UIViewController, NetService
     
     public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         if indexPath.section == 0 {
+            guard indexPath.row < list.count else { return }
             let entry = list[indexPath.row]
-            
+
             if let service = entry.service {
                 self.delegate?.selectedHomeTouchManager(service: service)
             }

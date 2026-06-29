@@ -52,11 +52,28 @@ private class ActiveRequest {
     let request: Request
     var bytesDone: Int
     var buffer: UnsafeMutablePointer<UInt8>
-    
+    private var isCompleted = false
+
     init(request: Request) {
         self.request = request
         self.bytesDone = 0
         self.buffer = UnsafeMutablePointer<UInt8>(request.buffer)
+    }
+
+    // Resume the underlying continuation at most once. A write completing
+    // (writeNextChunk) and a stream error (.errorOccurred) can both target the
+    // same request; resuming a checked continuation twice is a fatal
+    // "SWIFT TASK CONTINUATION MISUSE".
+    func fulfill(_ p: OpaquePointer) {
+        guard !isCompleted else { return }
+        isCompleted = true
+        request.fulfill(p)
+    }
+
+    func reject(_ error: Error) {
+        guard !isCompleted else { return }
+        isCompleted = true
+        request.reject(error)
     }
 }
 
@@ -293,8 +310,8 @@ public class NetworkChannel : NSObject, StreamDelegate {
             
             if activeRequest.bytesDone == activeRequest.request.length {
                 activeWriteRequest = nil
-                activeRequest.request.fulfill(OpaquePointer(activeRequest.buffer))
-                
+                activeRequest.fulfill(OpaquePointer(activeRequest.buffer))
+
                 initiateNextWriteRequest()
             }
         }
@@ -315,7 +332,8 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 self.gotInputBuffer.error(NetworkChannelError.ReadError)
                 
                 if let activeRequest = activeWriteRequest {
-                    activeRequest.request.reject(NetworkChannelError.WriteError)
+                    activeWriteRequest = nil
+                    activeRequest.reject(NetworkChannelError.WriteError)
                 }
             }
         }

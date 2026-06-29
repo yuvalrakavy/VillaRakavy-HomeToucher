@@ -145,9 +145,36 @@ public class NetworkChannel : NSObject, StreamDelegate {
             deinitStream(stream: stream)
             outputStream = nil
         }
-        
-        writeRequestQueue = []
+
+        // Resume any pending/active write continuations so the tasks awaiting them
+        // don't leak (continuation misuse / suspended forever).
+        rejectAllPendingWrites(NetworkChannelError.WriteError)
+    }
+
+    /// Resume every pending and active write continuation with an error. Safe to
+    /// call repeatedly: the active request resumes at most once (its own guard) and
+    /// the queue is emptied, so a second call is a no-op.
+    private func rejectAllPendingWrites(_ error: Error) {
+        let active = activeWriteRequest
         activeWriteRequest = nil
+        let pending = writeRequestQueue
+        writeRequestQueue = []
+
+        active?.reject(error)
+        for request in pending {
+            request.reject(error)
+        }
+    }
+
+    /// Treat a mid-session stream failure (error or end-of-stream) as connection
+    /// loss: stop the reader and fail all pending writes so every awaiting task
+    /// unblocks. The read loop then surfaces the error and the session terminates
+    /// and reconnects. Without this, an ended output stream left sendToServer
+    /// suspended forever, freezing the UI ("not responsive").
+    private func failConnection() {
+        state = .error
+        gotInputBuffer.error(NetworkChannelError.ReadError)
+        rejectAllPendingWrites(NetworkChannelError.WriteError)
     }
     
     deinit {
@@ -331,14 +358,7 @@ public class NetworkChannel : NSObject, StreamDelegate {
                 state = .error
                 reject(NetworkChannelError.CannotConnectToServer("\(server):\(port)"))
             default:
-                state = .error
-
-                self.gotInputBuffer.error(NetworkChannelError.ReadError)
-
-                if let activeRequest = activeWriteRequest {
-                    activeWriteRequest = nil
-                    activeRequest.reject(NetworkChannelError.WriteError)
-                }
+                failConnection()
             }
         }
         else {
@@ -373,13 +393,11 @@ public class NetworkChannel : NSObject, StreamDelegate {
             }
             
             if eventCode.contains(.endEncountered) {
-                if aStream === inputStream {
-                    NSLog("Unexpected endOfStream on input stream")
-                    self.gotInputBuffer.error(NetworkChannelError.ReadError)
-                }
-                else {
-                    NSLog("Unexpected endOfStream on stream which is not input stream (??)")
-                }
+                NSLog("endOfStream on \(aStream === inputStream ? "input" : "output") stream")
+                // Either stream ending means the connection is gone. Fail all pending
+                // I/O so awaiting tasks unblock (previously an ended OUTPUT stream was
+                // only logged, leaving sendToServer suspended forever).
+                failConnection()
             }
         }
     }

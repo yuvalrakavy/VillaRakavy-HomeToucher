@@ -70,6 +70,7 @@ public class HomeTouchManagerBrowser : NSObject, NetServiceBrowserDelegate {
     // The browser is scheduled on the main runloop (searchForServices is called from
     // the @MainActor findManager), so this callback arrives on the main actor.
     public nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        nonisolated(unsafe) let service = service   // hand-off to the main actor (same thread)
         MainActor.assumeIsolated {
             self.handleDidFind(service: service, moreComing: moreComing)
         }
@@ -126,6 +127,7 @@ public class ServiceAddressResolver: NSObject, NetServiceDelegate {
     // resolve(withTimeout:) is scheduled on the main runloop (called from the
     // @MainActor resolveServiceAddress), so these callbacks arrive on the main actor.
     public nonisolated func netServiceDidResolveAddress(_ sender: NetService) {
+        nonisolated(unsafe) let sender = sender   // hand-off to the main actor (same thread)
         MainActor.assumeIsolated {
             sender.delegate = nil
             self.resolvedService = sender
@@ -135,6 +137,7 @@ public class ServiceAddressResolver: NSObject, NetServiceDelegate {
     }
 
     public nonisolated func netService(_ sender: NetService, didNotResolve errorDict: [String : NSNumber]) {
+        nonisolated(unsafe) let sender = sender   // hand-off to the main actor (same thread)
         MainActor.assumeIsolated {
             sender.delegate = nil
             self.resolvedService = nil

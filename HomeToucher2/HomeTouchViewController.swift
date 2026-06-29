@@ -92,7 +92,17 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
         }
 
         if model.homeTouchManagerServiceName == nil {
-            _ = await self.ensureHasHometouchService()
+            // No zone chosen yet: present the selector and retry once the user picks
+            // one. Do NOT consume the selection signal here — handleHometouchManagerChange
+            // is the single consumer (a second consumer would fight it for the
+            // AsyncStream's one iterator). The loop re-reads the chosen name next pass.
+            NSLog("No zone selected; prompting for one")
+            self.stateLabel.text = NSLocalizedString("LookingForHomeTouchManager", comment: "")
+            if self.zoneSelectionController == nil {
+                self.selectHomeTouchManager()
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            throw HomeTouchControllerError.GetServerOperationAborted
         }
 
         if let homeTouchManagerAddress = self.model.homeTouchManagerServiceAddress {
@@ -157,12 +167,6 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
         } else {
             throw HomeTouchControllerError.GetServerOperationAborted
         }
-    }
-    
-    func ensureHasHometouchService() async -> Bool {
-        self.selectHomeTouchManager()
-        _ = try? await self.homeTouchManagerServiceSelected.wait()
-        return true
     }
     
     func handleRfbSessions(isCancelled: @escaping () async -> Bool) async {
@@ -342,14 +346,17 @@ class HomeTouchViewController: UIViewController, @MainActor HomeTouchZoneSelecti
     
     func handleHometouchManagerChange() {
         Task { @MainActor in
-            while true {
-                do {
-                    let service = try await self.homeTouchManagerServiceSelected.wait()
-                    if service != nil || self.model.useSpecificServer {
-                        self.activeRfbSession?.terminate()
-                    }
-                } catch {
-                    break
+            // Single, long-lived consumer of the selection signal. Iterate the
+            // AsyncStream directly with ONE iterator: previously this called
+            // PromisedQueue.wait() in a loop, which created a fresh iterator each
+            // time. An AsyncStream supports only one iterator, so after the first
+            // selection further ones were dropped — which is why changing to a
+            // different zone while connected did not switch (the active session was
+            // never terminated). Terminating it makes the session loop reconnect to
+            // the newly-chosen zone.
+            for await service in self.homeTouchManagerServiceSelected.stream {
+                if service != nil || self.model.useSpecificServer {
+                    self.activeRfbSession?.terminate()
                 }
             }
         }
